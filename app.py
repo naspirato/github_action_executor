@@ -3,11 +3,13 @@ GitHub Action Executor - Main application entry point
 Web interface for triggering GitHub Actions workflows with contributor verification
 """
 import os
+import logging
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.middleware.sessions import SessionMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware
 from dotenv import load_dotenv
 
 from backend.routes import auth, workflow, api
@@ -15,11 +17,33 @@ from backend.routes import auth, workflow, api
 # Load environment variables
 load_dotenv()
 
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'
+)
+logger = logging.getLogger(__name__)
+
 app = FastAPI(
     title="GitHub Action Executor",
     description="Web interface for triggering GitHub Actions workflows",
     version="1.0.0"
 )
+
+# Add request logging middleware
+class LoggingMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        logger.info(f"Request: {request.method} {request.url.path} from {request.client.host if request.client else 'unknown'}")
+        try:
+            response = await call_next(request)
+            logger.info(f"Response: {request.method} {request.url.path} - Status: {response.status_code}")
+            return response
+        except Exception as e:
+            logger.error(f"Error processing {request.method} {request.url.path}: {str(e)}", exc_info=True)
+            raise
+
+app.add_middleware(LoggingMiddleware)
 
 # Add session middleware for OAuth
 secret_key = os.getenv("SECRET_KEY", "change-this-secret-key-in-production")
