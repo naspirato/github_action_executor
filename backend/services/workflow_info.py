@@ -71,6 +71,8 @@ async def get_workflow_info(owner: str, repo: str, workflow_id: str) -> dict:
                 
                 # Decode file content
                 content = base64.b64decode(file_data["content"]).decode("utf-8")
+                logger.debug(f"Workflow file content length: {len(content)} chars")
+                logger.debug(f"First 500 chars of content:\n{content[:500]}")
                 
                 # Parse YAML
                 # GitHub API не предоставляет inputs напрямую, поэтому парсим YAML вручную
@@ -78,9 +80,10 @@ async def get_workflow_info(owner: str, repo: str, workflow_id: str) -> dict:
                 try:
                     workflow_yaml = yaml.safe_load(content)
                     if not workflow_yaml:
-                        logger.warning("Workflow YAML is empty or None")
+                        logger.warning("Workflow YAML is empty or None after parsing")
                     else:
-                        logger.debug(f"Parsed workflow YAML, top-level keys: {list(workflow_yaml.keys())}")
+                        logger.info(f"Parsed workflow YAML successfully, top-level keys: {list(workflow_yaml.keys())}")
+                        logger.debug(f"Full parsed YAML structure: {workflow_yaml}")
                     
                     # Extract inputs from workflow_dispatch
                     # В YAML структура: on.workflow_dispatch.inputs
