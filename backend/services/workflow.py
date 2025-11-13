@@ -55,10 +55,34 @@ async def trigger_workflow(
             response = await client.post(url, headers=headers, json=payload)
             response.raise_for_status()
             
+            # Попытаемся получить run_id из последнего запуска workflow
+            run_id = None
+            run_url = None
+            try:
+                # Получаем последний workflow run
+                runs_url = f"https://api.github.com/repos/{owner}/{repo}/actions/workflows/{workflow_id}/runs"
+                runs_response = await client.get(
+                    runs_url,
+                    headers=headers,
+                    params={"per_page": 1}
+                )
+                if runs_response.status_code == 200:
+                    runs_data = runs_response.json()
+                    if runs_data.get("workflow_runs") and len(runs_data["workflow_runs"]) > 0:
+                        run = runs_data["workflow_runs"][0]
+                        run_id = run.get("id")
+                        run_url = run.get("html_url")
+            except Exception:
+                # Если не удалось получить run_id - не критично
+                pass
+            
             return {
                 "success": True,
                 "status_code": response.status_code,
-                "message": "Workflow triggered successfully"
+                "message": "Workflow triggered successfully",
+                "run_id": run_id,
+                "run_url": run_url,
+                "workflow_url": f"https://github.com/{owner}/{repo}/actions/workflows/{workflow_id}"
             }
     except httpx.HTTPStatusError as e:
         error_message = "Unknown error"
