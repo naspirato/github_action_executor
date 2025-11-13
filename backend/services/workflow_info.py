@@ -99,9 +99,18 @@ async def get_workflow_info(owner: str, repo: str, workflow_id: str) -> dict:
                     
                     # Extract inputs from workflow_dispatch
                     # В YAML структура: on.workflow_dispatch.inputs
+                    # ВАЖНО: PyYAML парсит 'on' как булево True, поэтому проверяем оба варианта
+                    on_section = None
                     if "on" in workflow_yaml:
                         on_section = workflow_yaml["on"]
-                        logger.debug(f"Workflow 'on' section type: {type(on_section)}")
+                        logger.info("Found 'on' key as string")
+                    elif True in workflow_yaml:
+                        # PyYAML парсит 'on' как True (boolean)
+                        on_section = workflow_yaml[True]
+                        logger.info("Found 'on' key as boolean True (PyYAML quirk)")
+                    
+                    if on_section:
+                        logger.info(f"Workflow 'on' section type: {type(on_section)}, value: {on_section}")
                         
                         workflow_dispatch = None
                         
