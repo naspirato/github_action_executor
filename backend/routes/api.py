@@ -1,12 +1,18 @@
 """
 API routes for programmatic access
 """
-from fastapi import APIRouter, Request, HTTPException, Depends
+import logging
+import httpx
+from fastapi import APIRouter, Request, HTTPException, Depends, Query
 from pydantic import BaseModel
 from typing import Optional, List
 
 from backend.services.permissions import is_contributor, check_repository_access
 from backend.services.workflow import trigger_workflow
+from backend.services.branches import get_branches
+from backend.services.workflows import get_workflows
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -82,4 +88,87 @@ async def api_trigger_workflow(
         )
     
     return result
+
+
+@router.get("/branches")
+async def api_get_branches(
+    owner: str = Query(...),
+    repo: str = Query(...),
+    request: Request = None
+):
+    """API endpoint to get branches for a repository"""
+    try:
+        branches = await get_branches(owner, repo)
+        return {"branches": branches}
+    except httpx.HTTPStatusError as e:
+        # Извлекаем сообщение об ошибке из ответа GitHub
+        status_code = e.response.status_code
+        try:
+            error_data = e.response.json()
+            error_message = error_data.get("message", str(e))
+        except:
+            error_message = str(e)
+        
+        logger.error(f"GitHub API error getting branches for {owner}/{repo}: {status_code} - {error_message}")
+        raise HTTPException(status_code=status_code, detail=error_message)
+    except Exception as e:
+        logger.error(f"Unexpected error getting branches for {owner}/{repo}: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to get branches: {str(e)}")
+
+
+@router.get("/workflows")
+async def api_get_workflows(
+    owner: str = Query(...),
+    repo: str = Query(...),
+    request: Request = None
+):
+    """API endpoint to get workflows for a repository"""
+    try:
+        workflows = await get_workflows(owner, repo)
+        return {"workflows": workflows}
+    except httpx.HTTPStatusError as e:
+        # Извлекаем сообщение об ошибке из ответа GitHub
+        status_code = e.response.status_code
+        try:
+            error_data = e.response.json()
+            error_message = error_data.get("message", str(e))
+        except:
+            error_message = str(e)
+        
+        logger.error(f"GitHub API error getting workflows for {owner}/{repo}: {status_code} - {error_message}")
+        raise HTTPException(status_code=status_code, detail=error_message)
+    except Exception as e:
+        logger.error(f"Unexpected error getting workflows for {owner}/{repo}: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to get workflows: {str(e)}")
+
+
+@router.get("/workflow-info")
+async def api_get_workflow_info(
+    owner: str = Query(...),
+    repo: str = Query(...),
+    workflow_id: str = Query(...),
+    request: Request = None
+):
+    """API endpoint to get workflow info including inputs"""
+    try:
+        from backend.services.workflow_info import get_workflow_info
+        workflow_info = await get_workflow_info(owner, repo, workflow_id)
+        return {
+            "found": workflow_info.get("found", False),
+            "inputs": workflow_info.get("inputs", {})
+        }
+    except httpx.HTTPStatusError as e:
+        # Извлекаем сообщение об ошибке из ответа GitHub
+        status_code = e.response.status_code
+        try:
+            error_data = e.response.json()
+            error_message = error_data.get("message", str(e))
+        except:
+            error_message = str(e)
+        
+        logger.error(f"GitHub API error getting workflow info for {owner}/{repo}/{workflow_id}: {status_code} - {error_message}")
+        raise HTTPException(status_code=status_code, detail=error_message)
+    except Exception as e:
+        logger.error(f"Unexpected error getting workflow info for {owner}/{repo}/{workflow_id}: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to get workflow info: {str(e)}")
 

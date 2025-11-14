@@ -9,71 +9,11 @@ from fastapi.templating import Jinja2Templates
 
 from backend.services.permissions import is_contributor, check_repository_access
 from backend.services.workflow import trigger_workflow
-from backend.services.workflow_info import get_workflow_info
 from backend.services.github_oauth import get_oauth_url
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
 templates = Jinja2Templates(directory="frontend/templates")
-
-
-@router.get("/form", response_class=HTMLResponse)
-async def workflow_form(
-    request: Request,
-    owner: str = None,
-    repo: str = None,
-    workflow_id: str = None,
-    ref: str = None
-):
-    """Display workflow trigger form with dynamic inputs"""
-    # Check authentication
-    user = request.session.get("user")
-    access_token = request.session.get("access_token")
-    
-    if not user or not access_token:
-        # Redirect to login
-        oauth_url = get_oauth_url()
-        return RedirectResponse(url=oauth_url)
-    
-    # Use defaults if not provided
-    owner = owner or os.getenv("DEFAULT_REPO_OWNER")
-    repo = repo or os.getenv("DEFAULT_REPO_NAME")
-    workflow_id = workflow_id or os.getenv("DEFAULT_WORKFLOW_ID")
-    ref = ref or "main"
-    
-    # Get workflow information including inputs
-    workflow_info = None
-    inputs_schema = {}
-    try:
-        if owner and repo and workflow_id:
-            logger.info(f"Getting workflow info for {owner}/{repo}/{workflow_id}")
-            workflow_info = await get_workflow_info(owner, repo, workflow_id)
-            logger.info(f"Workflow info found: {workflow_info.get('found')}, inputs count: {len(workflow_info.get('inputs', {}))}")
-            
-            if workflow_info.get("found"):
-                inputs_schema = workflow_info.get("inputs", {})
-                logger.info(f"Inputs schema keys: {list(inputs_schema.keys())}")
-                for key, value in inputs_schema.items():
-                    logger.debug(f"Input '{key}': {value}")
-            else:
-                logger.warning(f"Workflow {workflow_id} not found in {owner}/{repo}")
-    except Exception as e:
-        logger.error(f"Failed to get workflow info: {str(e)}", exc_info=True)
-        # Continue without workflow info - form will work with default fields
-    
-    return templates.TemplateResponse(
-        "form.html",
-        {
-            "request": request,
-            "user": user,
-            "owner": owner,
-            "repo": repo,
-            "workflow_id": workflow_id,
-            "ref": ref,
-            "workflow_info": workflow_info,
-            "inputs_schema": inputs_schema
-        }
-    )
 
 
 async def _trigger_and_show_result(
@@ -91,6 +31,11 @@ async def _trigger_and_show_result(
     access_token = request.session.get("access_token")
     
     if not user or not access_token:
+        # Save current URL for redirect after OAuth
+        current_url = str(request.url)
+        request.session["oauth_redirect_after"] = current_url
+        logger.info(f"No session found, saving redirect URL: {current_url}")
+        
         # Redirect to login
         oauth_url = get_oauth_url()
         if return_json:
@@ -112,7 +57,7 @@ async def _trigger_and_show_result(
             error_msg = f"User {username} is not a contributor or does not have access to {owner}/{repo}"
             if return_json:
                 raise HTTPException(status_code=403, detail=error_msg)
-            return templates.TemplateResponse(
+            response = templates.TemplateResponse(
                 "result.html",
                 {
                     "request": request,
@@ -124,6 +69,11 @@ async def _trigger_and_show_result(
                     "workflow_id": workflow_id
                 }
             )
+            # Prevent caching
+            response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+            response.headers["Pragma"] = "no-cache"
+            response.headers["Expires"] = "0"
+            return response
     
     # Trigger workflow
     try:
@@ -138,15 +88,20 @@ async def _trigger_and_show_result(
         
         if return_json:
             if result["success"]:
-                return JSONResponse(content=result)
+                json_response = JSONResponse(content=result)
+                # Prevent caching for JSON responses too
+                json_response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+                json_response.headers["Pragma"] = "no-cache"
+                json_response.headers["Expires"] = "0"
+                return json_response
             else:
                 raise HTTPException(
                     status_code=result["status_code"],
                     detail=result["message"]
                 )
         
-        # Return HTML result page
-        return templates.TemplateResponse(
+        # Return HTML result page with no-cache headers
+        response = templates.TemplateResponse(
             "result.html",
             {
                 "request": request,
@@ -164,13 +119,18 @@ async def _trigger_and_show_result(
                 "error": result.get("message") if not result["success"] else None
             }
         )
+        # Prevent caching to ensure workflow is triggered on each request
+        response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+        response.headers["Pragma"] = "no-cache"
+        response.headers["Expires"] = "0"
+        return response
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"Failed to trigger workflow: {str(e)}", exc_info=True)
         if return_json:
             raise HTTPException(status_code=500, detail=f"Failed to trigger workflow: {str(e)}")
-        return templates.TemplateResponse(
+        response = templates.TemplateResponse(
             "result.html",
             {
                 "request": request,
@@ -182,6 +142,11 @@ async def _trigger_and_show_result(
                 "workflow_id": workflow_id
             }
         )
+        # Prevent caching
+        response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+        response.headers["Pragma"] = "no-cache"
+        response.headers["Expires"] = "0"
+        return response
 
 
 @router.get("/trigger")
@@ -205,7 +170,7 @@ async def trigger_workflow_get(
     accept_header = request.headers.get("Accept", "")
     return_json = not ui and "application/json" in accept_header
     
-    # Если нужна форма - редирект
+    # Если нужна форма - редирект на главную страницу
     if ui:
         params = []
         if owner:
@@ -217,7 +182,7 @@ async def trigger_workflow_get(
         if ref and ref != "main":
             params.append(f"ref={ref}")
         query_string = "&".join(params)
-        return RedirectResponse(url=f"/workflow/form?{query_string}")
+        return RedirectResponse(url=f"/?{query_string}")
     
     # Use defaults if not provided
     owner = owner or os.getenv("DEFAULT_REPO_OWNER")
@@ -228,7 +193,7 @@ async def trigger_workflow_get(
         error_msg = "Repository owner, name, and workflow_id are required"
         if return_json:
             raise HTTPException(status_code=400, detail=error_msg)
-        return templates.TemplateResponse(
+        response = templates.TemplateResponse(
             "result.html",
             {
                 "request": request,
@@ -237,6 +202,11 @@ async def trigger_workflow_get(
                 "error": error_msg
             }
         )
+        # Prevent caching
+        response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+        response.headers["Pragma"] = "no-cache"
+        response.headers["Expires"] = "0"
+        return response
     
     # Parse inputs from query parameters
     # Все параметры кроме служебных считаются inputs
