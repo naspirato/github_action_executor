@@ -50,7 +50,8 @@ async def get_workflow_info(owner: str, repo: str, workflow_id: str) -> dict:
                 logger.warning(f"Workflow {workflow_id} not found in {owner}/{repo}")
                 return {
                     "found": False,
-                    "inputs": {}
+                    "inputs": {},
+                    "has_workflow_dispatch": False
                 }
             
             response.raise_for_status()
@@ -65,6 +66,7 @@ async def get_workflow_info(owner: str, repo: str, workflow_id: str) -> dict:
             file_response = await client.get(file_url, headers=headers)
             
             inputs = {}
+            has_workflow_dispatch = False
             if file_response.status_code == 200:
                 logger.info(f"Successfully retrieved workflow file content")
                 file_data = file_response.json()
@@ -118,6 +120,7 @@ async def get_workflow_info(owner: str, repo: str, workflow_id: str) -> dict:
                         if isinstance(on_section, dict):
                             if "workflow_dispatch" in on_section:
                                 workflow_dispatch = on_section["workflow_dispatch"]
+                                has_workflow_dispatch = True
                                 logger.info("Found workflow_dispatch as dict key in 'on' section")
                         
                         # Если on - это список (редкий случай, но возможен)
@@ -125,6 +128,7 @@ async def get_workflow_info(owner: str, repo: str, workflow_id: str) -> dict:
                             for item in on_section:
                                 if isinstance(item, dict) and "workflow_dispatch" in item:
                                     workflow_dispatch = item["workflow_dispatch"]
+                                    has_workflow_dispatch = True
                                     logger.info("Found workflow_dispatch in list within 'on' section")
                                     break
                         
@@ -187,9 +191,10 @@ async def get_workflow_info(owner: str, repo: str, workflow_id: str) -> dict:
                 "name": workflow_data.get("name", workflow_id),
                 "path": workflow_data.get("path"),
                 "state": workflow_data.get("state"),
-                "inputs": inputs
+                "inputs": inputs,
+                "has_workflow_dispatch": has_workflow_dispatch
             }
-            logger.info(f"Returning workflow info: found={result['found']}, inputs_count={len(inputs)}")
+            logger.info(f"Returning workflow info: found={result['found']}, has_workflow_dispatch={result['has_workflow_dispatch']}, inputs_count={len(inputs)}")
             return result
             
     except httpx.HTTPStatusError as e:
@@ -197,7 +202,8 @@ async def get_workflow_info(owner: str, repo: str, workflow_id: str) -> dict:
         if e.response.status_code == 404:
             return {
                 "found": False,
-                "inputs": {}
+                "inputs": {},
+                "has_workflow_dispatch": False
             }
         raise
     except Exception as e:

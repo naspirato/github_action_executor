@@ -184,7 +184,8 @@ async def api_get_workflow_info(
         workflow_info = await get_workflow_info(owner, repo, workflow_id)
         return {
             "found": workflow_info.get("found", False),
-            "inputs": workflow_info.get("inputs", {})
+            "inputs": workflow_info.get("inputs", {}),
+            "has_workflow_dispatch": workflow_info.get("has_workflow_dispatch", False)
         }
     except httpx.HTTPStatusError as e:
         # Извлекаем сообщение об ошибке из ответа GitHub
