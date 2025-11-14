@@ -99,3 +99,28 @@ jobs:
 - Убедитесь, что вы действительно коллаборатор репозитория (имеете доступ к репозиторию)
 - Проверьте, что OAuth токен имеет права на чтение репозитория
 
+### Ошибка "OAuth App access restrictions"
+Если вы видите ошибку:
+```
+Although you appear to have the correct authorization credentials, 
+the `organization-name` organization has enabled OAuth App access restrictions
+```
+
+Это означает, что организация включила ограничения доступа для OAuth приложений. Чтобы решить проблему:
+
+1. **Если вы владелец организации или имеете права администратора:**
+   - Перейдите в настройки организации: `https://github.com/organizations/ORGANIZATION_NAME/settings/oauth_application_policy`
+   - Найдите ваше OAuth App в списке "Third-party access"
+   - Нажмите "Grant" или "Approve" для вашего приложения
+   - Подробнее: https://docs.github.com/articles/restricting-access-to-your-organization-s-data/
+
+2. **Если вы не администратор организации:**
+   - Обратитесь к администратору организации
+   - Попросите его одобрить OAuth App в настройках организации
+   - Администратор должен перейти в: `Settings → Third-party access → OAuth Apps`
+   - И одобрить ваше приложение
+
+3. **Альтернативное решение:**
+   - Если у вас нет доступа к настройкам организации, можно использовать GitHub App вместо OAuth App
+   - GitHub Apps не требуют одобрения организации (если установлены в репозиторий)
+

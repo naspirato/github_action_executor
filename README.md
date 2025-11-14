@@ -1,11 +1,11 @@
 # GitHub Action Executor
 
-Веб-интерфейс для запуска GitHub Actions workflows с проверкой прав контрибьютора и возможностью выбора тестов.
+Веб-интерфейс для запуска GitHub Actions workflows с проверкой прав коллаборатора и возможностью выбора тестов.
 
 ## Возможности
 
 - ✅ Авторизация через GitHub OAuth
-- ✅ Проверка прав контрибьютора перед запуском workflow
+- ✅ Проверка прав коллаборатора перед запуском workflow
 - ✅ Веб-форма для выбора тестов
 - ✅ Запуск workflow через GitHub App (без использования PAT)
 - ✅ Готово для развертывания в Yandex Cloud
@@ -323,10 +323,29 @@ curl -X POST http://localhost:8000/api/trigger \
 ## Безопасность
 
 - ✅ Используется GitHub App вместо PAT
-- ✅ Проверка прав контрибьютора перед запуском
+- ✅ Проверка прав коллаборатора перед запуском
 - ✅ OAuth для аутентификации пользователей
 - ✅ Session-based аутентификация
 - ⚠️ **Важно**: Храните приватный ключ GitHub App в безопасном месте (Yandex Lockbox, Secrets Manager)
+
+## Решение проблем
+
+### OAuth App access restrictions
+
+Если вы видите ошибку о том, что организация включила ограничения доступа для OAuth приложений:
+
+**Для администраторов организации:**
+1. Перейдите в настройки организации: `https://github.com/organizations/ORGANIZATION_NAME/settings/oauth_application_policy`
+2. Найдите ваше OAuth App в списке "Third-party access"
+3. Нажмите "Grant" или "Approve" для вашего приложения
+4. Подробная документация: https://docs.github.com/articles/restricting-access-to-your-organization-s-data/
+
+**Для обычных пользователей:**
+- Обратитесь к администратору организации с просьбой одобрить OAuth App
+- Администратор должен перейти в: `Settings → Third-party access → OAuth Apps` и одобрить приложение
+
+**Альтернатива:**
+- Используйте GitHub App вместо OAuth App (GitHub Apps не требуют одобрения организации, если установлены в репозиторий)
 
 ## Структура проекта
 
