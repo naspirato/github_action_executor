@@ -55,7 +55,11 @@ async def github_login(request: Request, redirect_after: str = None):
 @router.get("/github/callback")
 async def github_callback(request: Request, code: str = None, state: str = None, error: str = None, error_description: str = None):
     """Handle GitHub OAuth callback"""
-    logger.info(f"OAuth callback received - code: {'present' if code else 'missing'}, state: {state[:20] if state else 'missing'}, error: {error}")
+    # Log all query parameters for debugging
+    all_params = dict(request.query_params)
+    logger.info(f"OAuth callback received - Full URL: {request.url}")
+    logger.info(f"OAuth callback query params: {all_params}")
+    logger.info(f"OAuth callback - code: {'present' if code else 'missing'}, state: {state[:20] if state else 'missing'}, error: {error}")
     
     # Check for OAuth errors from GitHub
     if error:
@@ -96,10 +100,20 @@ async def github_callback(request: Request, code: str = None, state: str = None,
             logger.warning("Consider using normal browser mode or enabling cookies in incognito for better security.")
             # Continue without state verification (less secure, but functional)
         else:
-            raise HTTPException(
-                status_code=400, 
-                detail="Invalid state parameter: session state not found and GitHub state is invalid. This may indicate a session cookie issue. Please try again in normal browser mode or check browser cookie settings."
+            # If no state from GitHub and no state in session, this might indicate:
+            # 1. User came directly to callback without going through OAuth flow
+            # 2. GitHub returned an error (like 404) and user was redirected manually
+            # 3. Session was lost and GitHub didn't return state
+            error_detail = (
+                "Invalid state parameter: session state not found and GitHub state is invalid. "
+                "This may indicate:\n"
+                "1. Session cookie issue (common in incognito mode) - try normal browser mode\n"
+                "2. OAuth App configuration issue - check that Client ID is correct in GitHub\n"
+                "3. Direct access to callback URL without OAuth flow\n\n"
+                "If you saw a 404 error from GitHub, the OAuth App with this Client ID doesn't exist. "
+                "Please check your OAuth App settings at https://github.com/settings/developers"
             )
+            raise HTTPException(status_code=400, detail=error_detail)
     elif session_state != state:
         logger.error(f"State mismatch!")
         logger.error(f"  Session state: {session_state}")
