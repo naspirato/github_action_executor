@@ -107,12 +107,17 @@ async def _trigger_and_show_result(
     # Trigger workflow
     try:
         logger.info(f"Triggering workflow: {owner}/{repo}/{workflow_id} on {ref} with inputs: {inputs}")
+        # Use user token if config says so
+        user_token = None
+        if config.USE_USER_TOKEN_FOR_WORKFLOWS:
+            user_token = access_token
         result = await trigger_workflow(
             owner=owner,
             repo=repo,
             workflow_id=workflow_id,
             inputs=inputs,
-            ref=ref
+            ref=ref,
+            user_token=user_token
         )
         
         if return_json:

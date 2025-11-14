@@ -85,13 +85,19 @@ async def api_trigger_workflow(
     if request_data.tests:
         inputs["tests"] = request_data.tests
     
+    # Use user token if config says so
+    user_token = None
+    if config.USE_USER_TOKEN_FOR_WORKFLOWS:
+        user_token = access_token
+    
     # Trigger workflow
     result = await trigger_workflow(
         owner=request_data.owner,
         repo=request_data.repo,
         workflow_id=request_data.workflow_id,
         inputs=inputs,
-        ref=request_data.ref
+        ref=request_data.ref,
+        user_token=user_token
     )
     
     if not result["success"]:
@@ -220,7 +226,23 @@ async def api_find_run(
         
         # Parse trigger_time from ISO format
         trigger_dt = datetime.fromisoformat(trigger_time.replace('Z', '+00:00'))
-        run_data = await find_workflow_run(owner, repo, workflow_id, trigger_dt, ref=ref)
+        
+        # Get user info if using user token
+        user_token = None
+        expected_actor_login = None
+        if config.USE_USER_TOKEN_FOR_WORKFLOWS and request:
+            user = request.session.get("user")
+            access_token = request.session.get("access_token")
+            if user and access_token:
+                user_token = access_token
+                expected_actor_login = user.get("login")
+        
+        run_data = await find_workflow_run(
+            owner, repo, workflow_id, trigger_dt, 
+            ref=ref, 
+            user_token=user_token,
+            expected_actor_login=expected_actor_login
+        )
         
         if run_data:
             run_id = run_data.get("id")

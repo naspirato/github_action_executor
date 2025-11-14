@@ -44,3 +44,8 @@ CHECK_PERMISSIONS = os.getenv("CHECK_PERMISSIONS", "true").lower() == "true"
 # По умолчанию: True (только контрибьюторы)
 ALLOW_CONTRIBUTORS_ONLY = os.getenv("ALLOW_CONTRIBUTORS_ONLY", "true").lower() == "true"
 
+# Выполнение workflow от имени авторизованного пользователя
+# По умолчанию: True (workflow выполняются от имени пользователя)
+# Если False, workflow выполняются от имени GitHub App
+USE_USER_TOKEN_FOR_WORKFLOWS = os.getenv("USE_USER_TOKEN_FOR_WORKFLOWS", "true").lower() == "true"
+
