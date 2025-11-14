@@ -937,15 +937,20 @@
                 if (data.can_trigger) {
                     runButton.disabled = false;
                     permissionMessage.textContent = '';
-                    if (data.is_contributor) {
+                    if (data.user_role === 'contributor') {
                         console.log(`User ${data.username} is a contributor to ${owner}/${repo}`);
-                    } else if (data.has_access) {
-                        console.log(`User ${data.username} has access to ${owner}/${repo} (collaborator)`);
+                    } else if (data.user_role === 'collaborator') {
+                        console.log(`User ${data.username} is a collaborator of ${owner}/${repo}`);
                     }
                 } else {
                     runButton.disabled = true;
-                    permissionMessage.textContent = `You are not a contributor or collaborator of ${owner}/${repo}`;
-                    console.log(`User ${data.username} does NOT have permission to trigger workflows in ${owner}/${repo}`);
+                    // Show appropriate message based on configuration
+                    if (data.allow_collaborators_only) {
+                        permissionMessage.textContent = `You are not a collaborator of ${owner}/${repo}. Only collaborators can trigger workflows.`;
+                    } else {
+                        permissionMessage.textContent = `You are not a contributor or collaborator of ${owner}/${repo}`;
+                    }
+                    console.log(`User ${data.username} (${data.user_role}) does NOT have permission to trigger workflows in ${owner}/${repo}`);
                 }
             } catch (error) {
                 console.error('Error checking permissions:', error);

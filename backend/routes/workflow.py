@@ -51,17 +51,37 @@ async def _trigger_and_show_result(
     if config.CHECK_PERMISSIONS:
         username = user["login"]
         is_contrib = await is_contributor(owner, repo, username, access_token)
-        logger.info(f"Checking permissions for user {username} in {owner}/{repo}: is_contributor={is_contrib}")
+        has_access = await check_repository_access(owner, repo, access_token)
         
-        if not is_contrib:
-            # Also check repository access (might be collaborator but not contributor)
-            has_access = await check_repository_access(owner, repo, access_token)
-            logger.info(f"User {username} in {owner}/{repo}: is_contributor={is_contrib}, has_access={has_access}")
-            if not has_access:
-                error_msg = f"User {username} is not a contributor or does not have access to {owner}/{repo}"
-                if return_json:
-                    raise HTTPException(status_code=403, detail=error_msg)
-                response = templates.TemplateResponse(
+        logger.info(f"Checking permissions for user {username} in {owner}/{repo}: is_contributor={is_contrib}, has_access={has_access}")
+        
+        # Determine if user can trigger based on config
+        if config.ALLOW_COLLABORATORS_ONLY:
+            # Only allow collaborators (users with repository access)
+            can_trigger = has_access
+            user_role = "collaborator" if has_access else "no access"
+            if is_contrib and not has_access:
+                user_role = "contributor (but not collaborator)"
+        else:
+            # Allow both contributors and collaborators
+            can_trigger = is_contrib or has_access
+            if is_contrib:
+                user_role = "contributor"
+            elif has_access:
+                user_role = "collaborator"
+            else:
+                user_role = "no access"
+        
+        logger.info(f"User {username} in {owner}/{repo}: role={user_role}, can_trigger={can_trigger} (ALLOW_COLLABORATORS_ONLY={config.ALLOW_COLLABORATORS_ONLY})")
+        
+        if not can_trigger:
+            if config.ALLOW_COLLABORATORS_ONLY:
+                error_msg = f"User {username} is not a collaborator of {owner}/{repo}. Only collaborators can trigger workflows."
+            else:
+                error_msg = f"User {username} is not a contributor or collaborator of {owner}/{repo}"
+            if return_json:
+                raise HTTPException(status_code=403, detail=error_msg)
+            response = templates.TemplateResponse(
                 "result.html",
                 {
                     "request": request,

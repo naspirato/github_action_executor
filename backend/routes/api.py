@@ -56,17 +56,28 @@ async def api_trigger_workflow(
             username,
             access_token
         )
+        has_access = await check_repository_access(
+            request_data.owner,
+            request_data.repo,
+            access_token
+        )
         
-        if not is_contrib:
-            has_access = await check_repository_access(
-                request_data.owner,
-                request_data.repo,
-                access_token
-            )
-            if not has_access:
+        # Determine if user can trigger based on config
+        if config.ALLOW_COLLABORATORS_ONLY:
+            # Only allow collaborators (users with repository access)
+            can_trigger = has_access
+            if not can_trigger:
                 raise HTTPException(
                     status_code=403,
-                    detail=f"User {username} is not a contributor or does not have access to {request_data.owner}/{request_data.repo}"
+                    detail=f"User {username} is not a collaborator of {request_data.owner}/{request_data.repo}. Only collaborators can trigger workflows."
+                )
+        else:
+            # Allow both contributors and collaborators
+            can_trigger = is_contrib or has_access
+            if not can_trigger:
+                raise HTTPException(
+                    status_code=403,
+                    detail=f"User {username} is not a contributor or collaborator of {request_data.owner}/{request_data.repo}"
                 )
     
     # Prepare inputs
@@ -261,9 +272,11 @@ async def api_check_permissions(
         raise HTTPException(status_code=401, detail="Not authenticated")
     
     username = user["login"]
+    logger.info(f"Checking permissions for authenticated user {username} in {owner}/{repo}")
     
     # If permission check is disabled, always allow
     if not config.CHECK_PERMISSIONS:
+        logger.info(f"Permission check disabled in config, allowing for user {username}")
         return {
             "is_contributor": True,  # Not checked, but return True for UI
             "has_access": True,
@@ -278,14 +291,35 @@ async def api_check_permissions(
         is_contrib = await is_contributor(owner, repo, username, access_token)
         has_access = await check_repository_access(owner, repo, access_token)
         
+        # Determine if user can trigger based on config
+        if config.ALLOW_COLLABORATORS_ONLY:
+            # Only allow collaborators (users with repository access)
+            can_trigger = has_access
+            user_role = "collaborator" if has_access else "no access"
+            if is_contrib and not has_access:
+                user_role = "contributor (but not collaborator)"
+        else:
+            # Allow both contributors and collaborators
+            can_trigger = is_contrib or has_access
+            if is_contrib:
+                user_role = "contributor"
+            elif has_access:
+                user_role = "collaborator"
+            else:
+                user_role = "no access"
+        
+        logger.info(f"Permission check result for user {username} in {owner}/{repo}: is_contributor={is_contrib}, has_access={has_access}, role={user_role}, can_trigger={can_trigger} (ALLOW_COLLABORATORS_ONLY={config.ALLOW_COLLABORATORS_ONLY})")
+        
         return {
             "is_contributor": is_contrib,
             "has_access": has_access,
-            "can_trigger": is_contrib or has_access,
+            "can_trigger": can_trigger,
+            "user_role": user_role,
             "username": username,
             "owner": owner,
             "repo": repo,
-            "check_enabled": True
+            "check_enabled": True,
+            "allow_collaborators_only": config.ALLOW_COLLABORATORS_ONLY
         }
     except Exception as e:
         logger.error(f"Error checking permissions: {str(e)}", exc_info=True)
