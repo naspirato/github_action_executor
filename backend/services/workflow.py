@@ -89,6 +89,7 @@ async def trigger_workflow(
         except:
             error_message = str(e)
         
+        logger.error(f"Failed to trigger workflow: {error_message} (status: {e.response.status_code})")
         return {
             "success": False,
             "status_code": e.response.status_code,

@@ -5,6 +5,7 @@ import os
 import logging
 import httpx
 from urllib.parse import urlencode
+import config
 
 logger = logging.getLogger(__name__)
 
@@ -27,10 +28,16 @@ def get_oauth_url(state: str = None) -> str:
     client_id = os.getenv("GITHUB_CLIENT_ID")
     callback_url = os.getenv("GITHUB_CALLBACK_URL", "http://localhost:8000/auth/github/callback")
     
+    # Request minimal scope if workflows run as GitHub App, or workflow scope if workflows run as user
+    if config.USE_USER_TOKEN_FOR_WORKFLOWS:
+        scope = "read:user workflow"  # workflow scope required for workflow_dispatch (actions: write)
+    else:
+        scope = "read:user"  # Minimal scope - only need user info
+    
     params = {
         "client_id": client_id,
         "redirect_uri": callback_url,
-        "scope": "read:user repo"  # read:user for user info, repo for triggering workflows (workflow_dispatch requires repo scope)
+        "scope": scope
     }
     
     if state:
