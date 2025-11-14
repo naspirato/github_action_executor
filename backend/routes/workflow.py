@@ -47,18 +47,21 @@ async def _trigger_and_show_result(
             )
         return RedirectResponse(url=oauth_url)
     
-    # Check if user is a contributor
-    username = user["login"]
-    is_contrib = await is_contributor(owner, repo, username, access_token)
-    
-    if not is_contrib:
-        # Also check repository access (might be collaborator but not contributor)
-        has_access = await check_repository_access(owner, repo, access_token)
-        if not has_access:
-            error_msg = f"User {username} is not a contributor or does not have access to {owner}/{repo}"
-            if return_json:
-                raise HTTPException(status_code=403, detail=error_msg)
-            response = templates.TemplateResponse(
+    # Check permissions if enabled in config
+    if config.CHECK_PERMISSIONS:
+        username = user["login"]
+        is_contrib = await is_contributor(owner, repo, username, access_token)
+        logger.info(f"Checking permissions for user {username} in {owner}/{repo}: is_contributor={is_contrib}")
+        
+        if not is_contrib:
+            # Also check repository access (might be collaborator but not contributor)
+            has_access = await check_repository_access(owner, repo, access_token)
+            logger.info(f"User {username} in {owner}/{repo}: is_contributor={is_contrib}, has_access={has_access}")
+            if not has_access:
+                error_msg = f"User {username} is not a contributor or does not have access to {owner}/{repo}"
+                if return_json:
+                    raise HTTPException(status_code=403, detail=error_msg)
+                response = templates.TemplateResponse(
                 "result.html",
                 {
                     "request": request,
@@ -75,6 +78,8 @@ async def _trigger_and_show_result(
             response.headers["Pragma"] = "no-cache"
             response.headers["Expires"] = "0"
             return response
+    else:
+        logger.info(f"Permission check disabled in config, allowing workflow trigger for user {user.get('login', 'unknown')}")
     
     # Trigger workflow
     try:

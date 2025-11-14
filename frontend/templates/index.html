@@ -28,8 +28,8 @@
 
         {% if user %}
         <main id="workflow-form-container">
-            <form id="workflowForm" action="/workflow/trigger" method="post" class="workflow-form">
-                <div class="form-group">
+                <form id="workflowForm" action="/workflow/trigger" method="post" class="workflow-form">
+                    <div class="form-group">
                     <div class="field-header">
                         <label for="repository">Repository</label>
                     </div>
@@ -47,9 +47,9 @@
                     </div>
                     <input type="hidden" id="owner" name="owner" value="{{ default_owner or '' }}">
                     <input type="hidden" id="repo" name="repo" value="{{ default_repo or '' }}">
-                </div>
-                
-                <div class="form-group">
+                    </div>
+                    
+                    <div class="form-group">
                     <div class="field-header">
                         <label for="branch">Branch</label>
                     </div>
@@ -79,9 +79,9 @@
                         </div>
                     </div>
                     <div id="branch-error" class="error-state" style="display: none; margin-top: 8px;"></div>
-                </div>
-                
-                <div class="form-group">
+                    </div>
+                    
+                    <div class="form-group">
                     <div class="field-header">
                         <label for="workflow_id">Workflow</label>
                         <span class="optional">Optional</span>
@@ -113,19 +113,20 @@
                         </div>
                     </div>
                     <div id="workflow-error" class="error-state" style="display: none; margin-top: 8px;"></div>
-                </div>
+                    </div>
 
-                {# Динамические поля для workflow inputs #}
+                    {# Динамические поля для workflow inputs #}
                 <div id="workflow-inputs-wrapper" style="display: none;">
                     <div id="workflow-inputs"></div>
                 </div>
                 
                 <div style="display: flex; gap: 12px; align-items: center;">
-                    <button type="submit" class="btn btn-primary" style="flex: 1;">Run workflow</button>
+                    <button type="submit" id="runButton" class="btn btn-primary" style="flex: 1;" disabled>Run workflow</button>
                     <button type="button" id="run-link-btn" class="btn btn-secondary" style="flex: 0 0 auto; opacity: 0.6; font-size: 13px; padding: 8px 16px; border-color: #d1d5db; background: #f9fafb; color: #6b7280;">Run link</button>
                     <button type="button" id="form-link-btn" class="btn btn-secondary" style="flex: 0 0 auto; opacity: 0.6; font-size: 13px; padding: 8px 16px; border-color: #d1d5db; background: #f9fafb; color: #6b7280;">Form link</button>
                 </div>
-            </form>
+                <div id="permission-message" style="margin-top: 10px; color: #6b7280; font-size: 0.9em;"></div>
+                </form>
             
             <footer class="page-footer">
                 <div class="footer-content">
@@ -138,12 +139,12 @@
                         <span class="user-login">{{ user.login }}</span>
                     </div>
                     <a href="/auth/logout" class="btn btn-secondary btn-small">Выйти</a>
-                </div>
+            </div>
             </footer>
-    </main>
-    {% endif %}
+        </main>
+        {% endif %}
     </div>
-
+    
     <script>
         // Функция для получения workflow inputs из URL параметров
         function getWorkflowInputsFromUrl() {
@@ -282,7 +283,7 @@
                         updateDropdown(currentValue);
                         isFirstInput = false;
                     }
-                    dropdown.classList.add('show');
+                dropdown.classList.add('show');
                     
                     // Если пользователь вводит текст, который точно совпадает с опцией - выбираем её
                     const searchTerm = searchInput.value.trim();
@@ -585,12 +586,12 @@
                 // Иначе загрузим после выбора branch
                 const refSelect = document.getElementById('ref');
                 if (refSelect && refSelect.value) {
-                    if (workflowsResponse.ok) {
-                        const workflowsData = await workflowsResponse.json();
-                        updateSelect('workflow_id', workflowsData.workflows.map(w => ({id: w.id, name: w.name})), null);
-                        initSearchableSelect('workflow_search', 'workflow_id', 'workflow_dropdown');
-                        // Загружаем inputs для выбранного workflow
-                        loadWorkflowInputs();
+                if (workflowsResponse.ok) {
+                    const workflowsData = await workflowsResponse.json();
+                    updateSelect('workflow_id', workflowsData.workflows.map(w => ({id: w.id, name: w.name})), null);
+                    initSearchableSelect('workflow_search', 'workflow_id', 'workflow_dropdown');
+                    // Загружаем inputs для выбранного workflow
+                    loadWorkflowInputs();
                         if (workflowError) workflowError.style.display = 'none';
                     } else {
                         // Показываем ошибку для workflows
@@ -623,6 +624,8 @@
                 // Скрываем спиннеры
                 if (branchLoader) branchLoader.style.display = 'none';
                 if (workflowLoader) workflowLoader.style.display = 'none';
+                // Check permissions after loading branches/workflows
+                checkUserPermissions();
             }
         }
         
@@ -684,12 +687,12 @@
                     ownerInput.value = owner;
                     repoInput.value = repo;
                     
-                    clearTimeout(loadTimeout);
-                    loadTimeout = setTimeout(function() {
-                        if (owner && repo) {
-                            loadBranchesAndWorkflows(owner, repo);
-                        }
-                    }, 500);
+                clearTimeout(loadTimeout);
+                loadTimeout = setTimeout(function() {
+                    if (owner && repo) {
+                        loadBranchesAndWorkflows(owner, repo);
+                    }
+                }, 500);
                 }
             }
             
@@ -896,6 +899,62 @@
             });
         }
         
+        // Function to check user permissions
+        async function checkUserPermissions() {
+            const ownerInput = document.getElementById('owner');
+            const repoInput = document.getElementById('repo');
+            const runButton = document.getElementById('runButton');
+            const permissionMessage = document.getElementById('permission-message');
+            
+            if (!ownerInput || !repoInput || !runButton || !permissionMessage) return;
+            
+            const owner = ownerInput.value.trim();
+            const repo = repoInput.value.trim();
+            
+            // If owner or repo are empty, disable button and show message
+            if (!owner || !repo) {
+                runButton.disabled = true;
+                permissionMessage.textContent = 'Please enter repository owner and name';
+                return;
+            }
+            
+            try {
+                const response = await fetch(`/api/check-permissions?owner=${encodeURIComponent(owner)}&repo=${encodeURIComponent(repo)}`);
+                
+                if (response.status === 401) {
+                    // Not authenticated
+                    runButton.disabled = true;
+                    permissionMessage.textContent = 'Please sign in with GitHub to run workflows';
+                    return;
+                }
+                
+                if (!response.ok) {
+                    throw new Error('Failed to check permissions');
+                }
+                
+                const data = await response.json();
+                
+                if (data.can_trigger) {
+                    runButton.disabled = false;
+                    permissionMessage.textContent = '';
+                    if (data.is_contributor) {
+                        console.log(`User ${data.username} is a contributor to ${owner}/${repo}`);
+                    } else if (data.has_access) {
+                        console.log(`User ${data.username} has access to ${owner}/${repo} (collaborator)`);
+                    }
+                } else {
+                    runButton.disabled = true;
+                    permissionMessage.textContent = `You are not a contributor or collaborator of ${owner}/${repo}`;
+                    console.log(`User ${data.username} does NOT have permission to trigger workflows in ${owner}/${repo}`);
+                }
+            } catch (error) {
+                console.error('Error checking permissions:', error);
+                // In case of error, allow attempt (check will be on server)
+                runButton.disabled = false;
+                permissionMessage.textContent = '';
+            }
+        }
+        
         // Инициализация при загрузке
         function initAll() {
             initSearchableSelect('workflow_search', 'workflow_id', 'workflow_dropdown');
@@ -905,9 +964,32 @@
             setupRunLinkButton();
             setupFormLinkButton();
             
-            // Если workflow_id уже выбран и есть owner/repo, загружаем workflow inputs
+            // Setup permission checking on owner/repo changes
             const ownerInput = document.getElementById('owner');
             const repoInput = document.getElementById('repo');
+            let permissionCheckTimeout;
+            
+            function handleOwnerRepoChange() {
+                clearTimeout(permissionCheckTimeout);
+                permissionCheckTimeout = setTimeout(checkUserPermissions, 500);
+            }
+            
+            if (ownerInput) {
+                ownerInput.addEventListener('input', handleOwnerRepoChange);
+                ownerInput.addEventListener('blur', handleOwnerRepoChange);
+                ownerInput.addEventListener('change', checkUserPermissions);
+            }
+            
+            if (repoInput) {
+                repoInput.addEventListener('input', handleOwnerRepoChange);
+                repoInput.addEventListener('blur', handleOwnerRepoChange);
+                repoInput.addEventListener('change', checkUserPermissions);
+            }
+            
+            // Always check permissions on page load
+            checkUserPermissions();
+            
+            // Если workflow_id уже выбран и есть owner/repo, загружаем workflow inputs
             const workflowIdSelect = document.getElementById('workflow_id');
             
             if (ownerInput && repoInput && workflowIdSelect) {

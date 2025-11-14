@@ -32,3 +32,9 @@ env_patterns = os.getenv("BRANCH_FILTER_PATTERNS", "")
 if env_patterns:
     BRANCH_FILTER_PATTERNS = [p.strip() for p in env_patterns.split(",") if p.strip()]
 
+# Проверка прав пользователя перед запуском workflow
+# Если True, проверяется является ли пользователь контрибьютором или коллаборатором
+# Если False, любой авторизованный пользователь может запускать workflows
+# По умолчанию: True (проверка включена)
+CHECK_PERMISSIONS = os.getenv("CHECK_PERMISSIONS", "true").lower() == "true"
+
