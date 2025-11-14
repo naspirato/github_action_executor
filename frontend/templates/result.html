@@ -139,15 +139,17 @@
         // Обработка автоматического открытия для случая когда run_url уже есть
         {% if run_url %}
         (function() {
+            const autoOpenDefault = {{ 'true' if auto_open_run else 'false' }};
             const AUTO_OPEN_KEY = 'github-action-executor-auto-open';
-            let autoOpen = true;
+            let autoOpen = autoOpenDefault;
             try {
                 const saved = localStorage.getItem(AUTO_OPEN_KEY);
                 if (saved !== null) {
                     autoOpen = saved === 'true';
                 }
             } catch (e) {
-                // Если localStorage недоступен, используем значение по умолчанию
+                // Если localStorage недоступен, используем значение из конфига
+                autoOpen = autoOpenDefault;
             }
             
             if (autoOpen) {
@@ -172,16 +174,18 @@
             const ref = '{{ ref }}';
             const workflowUrl = '{{ workflow_url }}';
             
-            // Флаг для автоматического открытия ссылки (по умолчанию true)
+            // Флаг для автоматического открытия ссылки из конфига
+            const autoOpenDefault = {{ 'true' if auto_open_run else 'false' }};
             const AUTO_OPEN_KEY = 'github-action-executor-auto-open';
-            let autoOpen = true;
+            let autoOpen = autoOpenDefault;
             try {
                 const saved = localStorage.getItem(AUTO_OPEN_KEY);
                 if (saved !== null) {
                     autoOpen = saved === 'true';
                 }
             } catch (e) {
-                // Если localStorage недоступен, используем значение по умолчанию
+                // Если localStorage недоступен, используем значение из конфига
+                autoOpen = autoOpenDefault;
             }
             
             // Устанавливаем чекбокс в соответствии с сохраненным значением

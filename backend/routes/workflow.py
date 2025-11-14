@@ -10,6 +10,7 @@ from fastapi.templating import Jinja2Templates
 from backend.services.permissions import is_contributor, check_repository_access
 from backend.services.workflow import trigger_workflow
 from backend.services.github_oauth import get_oauth_url
+import config
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -117,6 +118,7 @@ async def _trigger_and_show_result(
                 "run_url": result.get("run_url"),
                 "workflow_url": result.get("workflow_url"),
                 "trigger_time": result.get("trigger_time"),
+                "auto_open_run": config.AUTO_OPEN_RUN,
                 "error": result.get("message") if not result["success"] else None
             }
         )

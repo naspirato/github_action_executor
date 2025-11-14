@@ -11,6 +11,7 @@ from backend.services.permissions import is_contributor, check_repository_access
 from backend.services.workflow import trigger_workflow, find_workflow_run
 from backend.services.branches import get_branches
 from backend.services.workflows import get_workflows
+import config
 
 logger = logging.getLogger(__name__)
 
@@ -94,25 +95,19 @@ async def api_trigger_workflow(
 async def api_get_branches(
     owner: str = Query(...),
     repo: str = Query(...),
-    env: Optional[str] = Query(None),
     request: Request = None
 ):
     """
     API endpoint to get branches for a repository
+    Uses branch filter patterns from config.py
     
     Args:
         owner: Repository owner
         repo: Repository name
-        env: Optional comma-separated list of regex patterns to filter branches by name
-             Example: "production,staging,.*-prod$"
     """
     try:
-        env_patterns = None
-        if env:
-            # Split comma-separated patterns
-            env_patterns = [p.strip() for p in env.split(",") if p.strip()]
-            if len(env_patterns) == 0:
-                env_patterns = None
+        # Используем паттерны из конфига
+        env_patterns = config.BRANCH_FILTER_PATTERNS if config.BRANCH_FILTER_PATTERNS else None
         
         branches = await get_branches(owner, repo, env_patterns=env_patterns)
         return {"branches": branches}
