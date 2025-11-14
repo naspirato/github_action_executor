@@ -102,6 +102,105 @@ uvicorn app:app --host 0.0.0.0 --port 8000 --reload
 
 Приложение будет доступно по адресу: http://localhost:8000
 
+### Запуск в фоне (после отключения от SSH)
+
+#### Вариант 1: Использование скриптов start.sh/stop.sh (рекомендуется)
+
+```bash
+# Запуск в фоне
+./start.sh
+
+# Проверка логов
+tail -f nohup.out
+
+# Остановка
+./stop.sh
+```
+
+Скрипт автоматически:
+- Активирует виртуальное окружение
+- Запускает приложение с `nohup` (не завершится при отключении от SSH)
+- Сохраняет PID процесса в файл `app.pid`
+- Записывает логи в `nohup.out`
+
+#### Вариант 2: Ручной запуск с nohup
+
+```bash
+# Активируйте виртуальное окружение
+source venv/bin/activate
+
+# Запустите с nohup
+nohup uvicorn app:app --host 0.0.0.0 --port 8000 > nohup.out 2>&1 &
+
+# Сохраните PID (выведется после запуска)
+echo $! > app.pid
+
+# Для остановки
+kill $(cat app.pid)
+```
+
+#### Вариант 3: Использование systemd (для production)
+
+1. Отредактируйте service файл и замените плейсхолдеры:
+```bash
+# Откройте файл для редактирования
+nano github-action-executor.service
+
+# Замените:
+# - YOUR_USERNAME на ваше имя пользователя
+# - /path/to/github_action_executor на полный путь к директории проекта
+```
+
+2. Скопируйте service файл:
+```bash
+sudo cp github-action-executor.service /etc/systemd/system/
+```
+
+3. Запустите сервис:
+```bash
+# Перезагрузите systemd
+sudo systemctl daemon-reload
+
+# Запустите сервис
+sudo systemctl start github-action-executor
+
+# Включите автозапуск при перезагрузке
+sudo systemctl enable github-action-executor
+
+# Проверьте статус
+sudo systemctl status github-action-executor
+
+# Просмотр логов
+sudo journalctl -u github-action-executor -f
+
+# Остановка
+sudo systemctl stop github-action-executor
+```
+
+#### Вариант 4: Использование screen или tmux
+
+```bash
+# Установите screen (если не установлен)
+sudo apt-get install screen  # для Ubuntu/Debian
+# или
+sudo yum install screen      # для CentOS/RHEL
+
+# Запустите screen сессию
+screen -S gax
+
+# Внутри screen запустите приложение
+source venv/bin/activate
+uvicorn app:app --host 0.0.0.0 --port 8000
+
+# Отключитесь от screen: нажмите Ctrl+A, затем D
+
+# Вернуться к сессии
+screen -r gax
+
+# Список всех сессий
+screen -ls
+```
+
 ## Использование Docker
 
 ```bash
