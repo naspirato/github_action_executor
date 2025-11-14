@@ -24,7 +24,6 @@
             <div class="logo-container">
                 <img src="/static/fav.jpeg" alt="GitHub Action" class="github-logo">
             </div>
-            <p class="subtitle">Start a GitHub Actions workflow.</p>
         </header>
 
         {% if user %}
@@ -126,7 +125,14 @@
             
             <footer class="page-footer">
                 <div class="footer-content">
-                    <span class="user-login">{{ user.login }}</span>
+                    <div class="user-info">
+                        {% if user.avatar_url %}
+                        <img src="{{ user.avatar_url }}" alt="{{ user.login }}" class="user-avatar">
+                        {% else %}
+                        <div class="user-icon">👤</div>
+                        {% endif %}
+                        <span class="user-login">{{ user.login }}</span>
+                    </div>
                     <a href="/auth/logout" class="btn btn-secondary btn-small">Выйти</a>
                 </div>
             </footer>
