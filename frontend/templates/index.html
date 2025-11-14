@@ -123,6 +123,13 @@
                     <button type="button" id="copy-run-btn" class="btn btn-secondary" style="flex: 0 0 auto; opacity: 0.6; font-size: 13px; padding: 8px 16px; border-color: #d1d5db; background: #f9fafb; color: #6b7280;">Copy run</button>
                 </div>
             </form>
+            
+            <footer class="page-footer">
+                <div class="footer-content">
+                    <span class="user-login">{{ user.login }}</span>
+                    <a href="/auth/logout" class="btn btn-secondary btn-small">Выйти</a>
+                </div>
+            </footer>
         </main>
         {% endif %}
     </div>
@@ -237,6 +244,17 @@
                 }
                 if (selectId === 'workflow_id') {
                     loadWorkflowInputs();
+                } else if (selectId === 'ref') {
+                    // При изменении branch загружаем workflows
+                    const ownerInput = document.getElementById('owner');
+                    const repoInput = document.getElementById('repo');
+                    if (ownerInput && repoInput) {
+                        const owner = ownerInput.value.trim();
+                        const repo = repoInput.value.trim();
+                        if (owner && repo) {
+                            loadWorkflows(owner, repo);
+                        }
+                    }
                 }
             });
             
@@ -349,6 +367,53 @@
             }
         }
         
+        // Функция для загрузки только workflows
+        async function loadWorkflows(owner, repo) {
+            if (!owner || !repo) return;
+            
+            const workflowLoader = document.getElementById('workflow-loader');
+            const workflowError = document.getElementById('workflow-error');
+            
+            // Показываем спиннер
+            if (workflowLoader) workflowLoader.style.display = 'flex';
+            if (workflowError) workflowError.style.display = 'none';
+            
+            try {
+                const workflowsResponse = await fetch(`/api/workflows?owner=${encodeURIComponent(owner)}&repo=${encodeURIComponent(repo)}`);
+                
+                if (workflowsResponse.ok) {
+                    const workflowsData = await workflowsResponse.json();
+                    updateSelect('workflow_id', workflowsData.workflows.map(w => ({id: w.id, name: w.name})), null);
+                    initSearchableSelect('workflow_search', 'workflow_id', 'workflow_dropdown');
+                    // Загружаем inputs для выбранного workflow
+                    loadWorkflowInputs();
+                    if (workflowError) workflowError.style.display = 'none';
+                } else {
+                    // Показываем ошибку для workflows
+                    let errorMessage = 'Failed to load workflows';
+                    try {
+                        const errorData = await workflowsResponse.json();
+                        errorMessage = errorData.detail || errorMessage;
+                    } catch (e) {
+                        errorMessage = `Failed to load workflows: ${workflowsResponse.status} ${workflowsResponse.statusText}`;
+                    }
+                    if (workflowError) {
+                        workflowError.textContent = errorMessage;
+                        workflowError.style.display = 'block';
+                    }
+                    console.error('Failed to load workflows:', errorMessage);
+                }
+            } catch (error) {
+                console.error('Failed to load workflows:', error);
+                if (workflowError) {
+                    workflowError.textContent = `Error: ${error.message}`;
+                    workflowError.style.display = 'block';
+                }
+            } finally {
+                if (workflowLoader) workflowLoader.style.display = 'none';
+            }
+        }
+        
         // Функция для загрузки branches и workflows
         async function loadBranchesAndWorkflows(owner, repo) {
             if (!owner || !repo) return;
@@ -397,28 +462,32 @@
                     console.error('Failed to load branches:', errorMessage);
                 }
                 
-                // Обработка workflows
-                if (workflowsResponse.ok) {
-                    const workflowsData = await workflowsResponse.json();
-                    updateSelect('workflow_id', workflowsData.workflows.map(w => ({id: w.id, name: w.name})), null);
-                    initSearchableSelect('workflow_search', 'workflow_id', 'workflow_dropdown');
-                    // Загружаем inputs для выбранного workflow
-                    loadWorkflowInputs();
-                    if (workflowError) workflowError.style.display = 'none';
-                } else {
-                    // Показываем ошибку для workflows
-                    let errorMessage = 'Failed to load workflows';
-                    try {
-                        const errorData = await workflowsResponse.json();
-                        errorMessage = errorData.detail || errorMessage;
-                    } catch (e) {
-                        errorMessage = `Failed to load workflows: ${workflowsResponse.status} ${workflowsResponse.statusText}`;
+                // Обработка workflows - загружаем только если branch уже выбран
+                // Иначе загрузим после выбора branch
+                const refSelect = document.getElementById('ref');
+                if (refSelect && refSelect.value) {
+                    if (workflowsResponse.ok) {
+                        const workflowsData = await workflowsResponse.json();
+                        updateSelect('workflow_id', workflowsData.workflows.map(w => ({id: w.id, name: w.name})), null);
+                        initSearchableSelect('workflow_search', 'workflow_id', 'workflow_dropdown');
+                        // Загружаем inputs для выбранного workflow
+                        loadWorkflowInputs();
+                        if (workflowError) workflowError.style.display = 'none';
+                    } else {
+                        // Показываем ошибку для workflows
+                        let errorMessage = 'Failed to load workflows';
+                        try {
+                            const errorData = await workflowsResponse.json();
+                            errorMessage = errorData.detail || errorMessage;
+                        } catch (e) {
+                            errorMessage = `Failed to load workflows: ${workflowsResponse.status} ${workflowsResponse.statusText}`;
+                        }
+                        if (workflowError) {
+                            workflowError.textContent = errorMessage;
+                            workflowError.style.display = 'block';
+                        }
+                        console.error('Failed to load workflows:', errorMessage);
                     }
-                    if (workflowError) {
-                        workflowError.textContent = errorMessage;
-                        workflowError.style.display = 'block';
-                    }
-                    console.error('Failed to load workflows:', errorMessage);
                 }
             } catch (error) {
                 console.error('Failed to load branches/workflows:', error);
