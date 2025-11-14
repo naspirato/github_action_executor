@@ -106,7 +106,8 @@
                     {# Динамические поля для workflow inputs #}
                     <div id="workflow-inputs"></div>
                     
-                    <button type="submit" class="btn btn-primary">Запустить Workflow</button>
+                    <button type="submit" id="runButton" class="btn btn-primary" disabled>Run Workflow</button>
+                    <div id="permission-message" style="margin-top: 10px; color: #6b7280; font-size: 0.9em;"></div>
                 </form>
             </div>
         </main>
@@ -283,8 +284,13 @@
                     // Загружаем inputs для выбранного workflow
                     loadWorkflowInputs();
                 }
+                
+                // Check permissions after loading branches/workflows
+                checkUserPermissions();
             } catch (error) {
                 console.error('Failed to load branches/workflows:', error);
+                // Still check permissions even if loading failed
+                checkUserPermissions();
             }
         }
         
@@ -326,6 +332,62 @@
             }
         }
         
+        // Function to check user permissions
+        async function checkUserPermissions() {
+            const ownerInput = document.getElementById('owner');
+            const repoInput = document.getElementById('repo');
+            const runButton = document.getElementById('runButton');
+            const permissionMessage = document.getElementById('permission-message');
+            
+            if (!ownerInput || !repoInput || !runButton || !permissionMessage) return;
+            
+            const owner = ownerInput.value.trim();
+            const repo = repoInput.value.trim();
+            
+            // If owner or repo are empty, disable button and show message
+            if (!owner || !repo) {
+                runButton.disabled = true;
+                permissionMessage.textContent = 'Please enter repository owner and name';
+                return;
+            }
+            
+            try {
+                const response = await fetch(`/api/check-permissions?owner=${encodeURIComponent(owner)}&repo=${encodeURIComponent(repo)}`);
+                
+                if (response.status === 401) {
+                    // Not authenticated
+                    runButton.disabled = true;
+                    permissionMessage.textContent = 'Please sign in with GitHub to run workflows';
+                    return;
+                }
+                
+                if (!response.ok) {
+                    throw new Error('Failed to check permissions');
+                }
+                
+                const data = await response.json();
+                
+                if (data.can_trigger) {
+                    runButton.disabled = false;
+                    permissionMessage.textContent = '';
+                    if (data.is_contributor) {
+                        console.log(`User ${data.username} is a contributor to ${owner}/${repo}`);
+                    } else if (data.has_access) {
+                        console.log(`User ${data.username} has access to ${owner}/${repo} (collaborator)`);
+                    }
+                } else {
+                    runButton.disabled = true;
+                    permissionMessage.textContent = `You are not a contributor or collaborator of ${owner}/${repo}`;
+                    console.log(`User ${data.username} does NOT have permission to trigger workflows in ${owner}/${repo}`);
+                }
+            } catch (error) {
+                console.error('Error checking permissions:', error);
+                // In case of error, allow attempt (check will be on server)
+                runButton.disabled = false;
+                permissionMessage.textContent = '';
+            }
+        }
+        
         // Инициализация при загрузке
         function initAll() {
             initSearchableSelect('workflow_search', 'workflow_id', 'workflow_dropdown');
@@ -334,14 +396,20 @@
             const ownerInput = document.getElementById('owner');
             const repoInput = document.getElementById('repo');
             let loadTimeout;
+            let permissionCheckTimeout;
             
             function handleOwnerRepoChange() {
                 clearTimeout(loadTimeout);
+                clearTimeout(permissionCheckTimeout);
                 loadTimeout = setTimeout(function() {
                     const owner = ownerInput.value.trim();
                     const repo = repoInput.value.trim();
                     if (owner && repo) {
                         loadBranchesAndWorkflows(owner, repo);
+                        // Check permissions after loading branches/workflows
+                        permissionCheckTimeout = setTimeout(checkUserPermissions, 1000);
+                    } else {
+                        checkUserPermissions();
                     }
                 }, 500);
             }
@@ -349,12 +417,17 @@
             if (ownerInput) {
                 ownerInput.addEventListener('input', handleOwnerRepoChange);
                 ownerInput.addEventListener('blur', handleOwnerRepoChange);
+                ownerInput.addEventListener('change', checkUserPermissions);
             }
             
             if (repoInput) {
                 repoInput.addEventListener('input', handleOwnerRepoChange);
                 repoInput.addEventListener('blur', handleOwnerRepoChange);
+                repoInput.addEventListener('change', checkUserPermissions);
             }
+            
+            // Always check permissions on page load
+            checkUserPermissions();
             
             if (ownerInput && repoInput && ownerInput.value && repoInput.value) {
                 loadBranchesAndWorkflows(ownerInput.value, repoInput.value);

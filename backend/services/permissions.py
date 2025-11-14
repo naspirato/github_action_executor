@@ -2,6 +2,9 @@
 Service for checking user permissions and contributor status
 """
 import httpx
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 async def is_contributor(owner: str, repo: str, username: str, access_token: str) -> bool:
@@ -38,6 +41,7 @@ async def is_contributor(owner: str, repo: str, username: str, access_token: str
                 
                 # Check if user is in this page
                 if any(contributor["login"].lower() == username.lower() for contributor in contributors):
+                    logger.info(f"User {username} IS a contributor to {owner}/{repo}")
                     return True
                 
                 # Check if there are more pages
@@ -46,13 +50,16 @@ async def is_contributor(owner: str, repo: str, username: str, access_token: str
                 
                 page += 1
             
+            logger.info(f"User {username} is NOT a contributor to {owner}/{repo}")
             return False
     except httpx.HTTPStatusError as e:
         if e.response.status_code == 404:
             # Repository not found or no access
+            logger.warning(f"Repository {owner}/{repo} not found or no access for {username}")
             return False
         raise
-    except Exception:
+    except Exception as e:
+        logger.error(f"Error checking contributor status for {username} in {owner}/{repo}: {str(e)}")
         return False
 
 
@@ -77,7 +84,16 @@ async def check_repository_access(owner: str, repo: str, access_token: str) -> b
     try:
         async with httpx.AsyncClient() as client:
             response = await client.get(url, headers=headers)
-            return response.status_code == 200
-    except httpx.HTTPStatusError:
+            has_access = response.status_code == 200
+            if has_access:
+                logger.info(f"User HAS access to {owner}/{repo} (collaborator or has repository access)")
+            else:
+                logger.info(f"User does NOT have access to {owner}/{repo} (status: {response.status_code})")
+            return has_access
+    except httpx.HTTPStatusError as e:
+        logger.warning(f"Error checking repository access for {owner}/{repo}: {e.response.status_code}")
+        return False
+    except Exception as e:
+        logger.error(f"Error checking repository access for {owner}/{repo}: {str(e)}")
         return False
 
