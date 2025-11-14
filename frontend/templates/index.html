@@ -118,7 +118,10 @@
                     <div id="workflow-inputs"></div>
                 </div>
                 
-                <button type="submit" class="btn btn-primary">Run workflow</button>
+                <div style="display: flex; gap: 12px; align-items: center;">
+                    <button type="submit" class="btn btn-primary" style="flex: 1;">Run workflow</button>
+                    <button type="button" id="copy-run-btn" class="btn btn-secondary" style="flex: 0 0 auto; opacity: 0.6; font-size: 13px; padding: 8px 16px; border-color: #d1d5db; background: #f9fafb; color: #6b7280;">Copy run</button>
+                </div>
             </form>
         </main>
         {% endif %}
@@ -172,10 +175,57 @@
             searchInput.addEventListener('input', function() {
                 updateDropdown();
                 dropdown.classList.add('show');
+                
+                // Если пользователь вводит текст, который точно совпадает с опцией - выбираем её
+                const searchTerm = searchInput.value.trim();
+                if (searchTerm) {
+                    Array.from(select.options).forEach(function(option) {
+                        if (option.value === '' || option.value === searchTerm || option.textContent.toLowerCase() === searchTerm.toLowerCase()) {
+                            if (option.value === searchTerm || option.textContent.toLowerCase() === searchTerm.toLowerCase()) {
+                                select.value = option.value;
+                                return;
+                            }
+                        }
+                    });
+                }
+            });
+            
+            // При потере фокуса, если значение не совпадает с опцией - оставляем как есть или сбрасываем
+            searchInput.addEventListener('blur', function() {
+                // Небольшая задержка, чтобы клик по опции успел сработать
+                setTimeout(function() {
+                    const searchTerm = searchInput.value.trim();
+                    const selectedOption = select.options[select.selectedIndex];
+                    
+                    // Если введенный текст не совпадает с выбранной опцией, пытаемся найти совпадение
+                    if (searchTerm && selectedOption && selectedOption.textContent.toLowerCase() !== searchTerm.toLowerCase()) {
+                        let found = false;
+                        Array.from(select.options).forEach(function(option) {
+                            if (option.value && !found) {
+                                if (option.textContent.toLowerCase() === searchTerm.toLowerCase() || 
+                                    option.value.toLowerCase() === searchTerm.toLowerCase()) {
+                                    select.value = option.value;
+                                    searchInput.value = option.textContent;
+                                    found = true;
+                                }
+                            }
+                        });
+                        
+                        // Если не нашли точного совпадения, оставляем текущее значение
+                        if (!found && selectedOption && selectedOption.value) {
+                            searchInput.value = selectedOption.textContent;
+                        }
+                    } else if (selectedOption && selectedOption.value) {
+                        // Обновляем текст в поле ввода на основе выбранной опции
+                        searchInput.value = selectedOption.textContent;
+                    }
+                    
+                    dropdown.classList.remove('show');
+                }, 200);
             });
             
             document.addEventListener('click', function(e) {
-                if (!searchInput.contains(e.target) && !dropdown.contains(e.target)) {
+                if (!searchInput.contains(e.target) && !dropdown.contains(e.target) && !select.contains(e.target)) {
                     dropdown.classList.remove('show');
                 }
             });
@@ -228,13 +278,13 @@
                     
                     let html = '';
                     for (const [inputName, inputConfig] of Object.entries(inputs)) {
-                        const fieldLabel = inputConfig.description || inputName.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
                         const isRequired = inputConfig.required || false;
                         const defaultValue = inputConfig.default;
+                        const description = inputConfig.description || '';
                         
                         html += '<div class="form-group">';
                         html += `<div class="field-header">`;
-                        html += `<label for="input_${inputName}">${fieldLabel}</label>`;
+                        html += `<label for="input_${inputName}">${inputName}</label>`;
                         if (!isRequired) {
                             html += `<span class="optional">Optional</span>`;
                         }
@@ -253,7 +303,7 @@
                             html += `<div class="checkbox-wrapper">`;
                             html += `<label class="checkbox-label">`;
                             html += `<input type="checkbox" id="input_${inputName}" name="${inputName}" value="true" ${defaultValue ? 'checked' : ''}>`;
-                            html += `<span>${fieldLabel}</span>`;
+                            html += `<span>${inputName}</span>`;
                             html += `</label>`;
                             html += `</div>`;
                         } else if (inputConfig.type === 'environment') {
@@ -266,7 +316,12 @@
                             }
                             html += '</select>';
                         } else {
-                            html += `<input type="text" id="input_${inputName}" name="${inputName}" value="${defaultValue || ''}" placeholder="${inputConfig.description || fieldLabel}" class="form-input" ${isRequired ? 'required' : ''}>`;
+                            html += `<input type="text" id="input_${inputName}" name="${inputName}" value="${defaultValue || ''}" placeholder="" class="form-input" ${isRequired ? 'required' : ''}>`;
+                        }
+                        
+                        // Добавляем description серым текстом под полем, если есть
+                        if (description) {
+                            html += `<small style="color: #9ca3af; font-size: 12px; margin-top: 4px; display: block;">${description}</small>`;
                         }
                         
                         html += '</div>';
@@ -448,12 +503,88 @@
             });
         }
         
+        // Функция для копирования ссылки на запуск
+        function setupCopyRunButton() {
+            const copyBtn = document.getElementById('copy-run-btn');
+            if (!copyBtn) return;
+            
+            copyBtn.addEventListener('click', function() {
+                const ownerInput = document.getElementById('owner');
+                const repoInput = document.getElementById('repo');
+                const workflowIdSelect = document.getElementById('workflow_id');
+                const refSelect = document.getElementById('ref');
+                
+                if (!ownerInput || !repoInput || !workflowIdSelect || !refSelect) {
+                    alert('Please fill in repository, workflow and branch');
+                    return;
+                }
+                
+                const owner = ownerInput.value.trim();
+                const repo = repoInput.value.trim();
+                const workflowId = workflowIdSelect.value.trim();
+                const ref = refSelect.value.trim();
+                
+                if (!owner || !repo || !workflowId || !ref) {
+                    alert('Please fill in repository, workflow and branch');
+                    return;
+                }
+                
+                // Формируем URL для trigger
+                const baseUrl = window.location.origin;
+                const params = new URLSearchParams({
+                    owner: owner,
+                    repo: repo,
+                    workflow_id: workflowId,
+                    ref: ref
+                });
+                
+                // Добавляем все inputs из формы
+                const form = document.getElementById('workflowForm');
+                if (form) {
+                    const formData = new FormData(form);
+                    for (const [key, value] of formData.entries()) {
+                        // Пропускаем служебные поля
+                        if (!['owner', 'repo', 'workflow_id', 'ref'].includes(key) && value) {
+                            params.append(key, value);
+                        }
+                    }
+                }
+                
+                const triggerUrl = `${baseUrl}/workflow/trigger?${params.toString()}`;
+                
+                // Копируем в буфер обмена
+                navigator.clipboard.writeText(triggerUrl).then(function() {
+                    // Показываем уведомление
+                    const originalText = copyBtn.textContent;
+                    const originalOpacity = copyBtn.style.opacity;
+                    copyBtn.textContent = 'Copied!';
+                    copyBtn.style.background = '#10b981';
+                    copyBtn.style.color = '#fff';
+                    copyBtn.style.opacity = '1';
+                    copyBtn.style.borderColor = '#10b981';
+                    
+                    setTimeout(function() {
+                        copyBtn.textContent = originalText;
+                        copyBtn.style.background = '#f9fafb';
+                        copyBtn.style.color = '#6b7280';
+                        copyBtn.style.opacity = originalOpacity || '0.6';
+                        copyBtn.style.borderColor = '#d1d5db';
+                    }, 2000);
+                }).catch(function(err) {
+                    console.error('Failed to copy:', err);
+                    // Fallback: показываем URL в prompt
+                    prompt('Copy this URL:', triggerUrl);
+                });
+            });
+        }
+        
         // Инициализация при загрузке
         function initAll() {
             initSearchableSelect('workflow_search', 'workflow_id', 'workflow_dropdown');
             initSearchableSelect('branch_search', 'ref', 'branch_dropdown');
             setupRepositoryField();
             setupFormValidation();
+            setupCopyRunButton();
         }
         
         if (document.readyState === 'loading') {
