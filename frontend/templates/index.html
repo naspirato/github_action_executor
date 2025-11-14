@@ -27,7 +27,7 @@
         </header>
 
         {% if user %}
-        <main>
+        <main id="workflow-form-container" data-workflow-inputs="{{ workflow_inputs | tojson | safe }}">
             <form id="workflowForm" action="/workflow/trigger" method="post" class="workflow-form">
                 <div class="form-group">
                     <div class="field-header">
@@ -59,14 +59,17 @@
                                    id="branch_search" 
                                    class="searchable-select-input" 
                                    placeholder="main"
-                                   value="{% if branches and branches|length > 0 %}main{% else %}main{% endif %}">
+                                   value="{% if default_ref %}{{ default_ref }}{% elif branches and branches|length > 0 %}main{% else %}main{% endif %}">
                             <select id="ref" name="ref" class="searchable-select">
                                 {% if branches and branches|length > 0 %}
                                     {% for branch in branches %}
-                                        <option value="{{ branch }}" {% if branch == 'main' %}selected{% endif %}>{{ branch }}</option>
+                                        <option value="{{ branch }}" {% if branch == default_ref or (not default_ref and branch == 'main') %}selected{% endif %}>{{ branch }}</option>
                                     {% endfor %}
                                 {% else %}
                                     <option value="main" selected>main</option>
+                                    {% if default_ref and default_ref != 'main' %}
+                                    <option value="{{ default_ref }}" selected>{{ default_ref }}</option>
+                                    {% endif %}
                                 {% endif %}
                             </select>
                             <div class="searchable-select-dropdown" id="branch_dropdown"></div>
@@ -119,7 +122,8 @@
                 
                 <div style="display: flex; gap: 12px; align-items: center;">
                     <button type="submit" class="btn btn-primary" style="flex: 1;">Run workflow</button>
-                    <button type="button" id="copy-run-btn" class="btn btn-secondary" style="flex: 0 0 auto; opacity: 0.6; font-size: 13px; padding: 8px 16px; border-color: #d1d5db; background: #f9fafb; color: #6b7280;">Copy run</button>
+                    <button type="button" id="run-link-btn" class="btn btn-secondary" style="flex: 0 0 auto; opacity: 0.6; font-size: 13px; padding: 8px 16px; border-color: #d1d5db; background: #f9fafb; color: #6b7280;">Run link</button>
+                    <button type="button" id="form-link-btn" class="btn btn-secondary" style="flex: 0 0 auto; opacity: 0.6; font-size: 13px; padding: 8px 16px; border-color: #d1d5db; background: #f9fafb; color: #6b7280;">Form link</button>
                 </div>
             </form>
             
@@ -136,11 +140,22 @@
                     <a href="/auth/logout" class="btn btn-secondary btn-small">Выйти</a>
                 </div>
             </footer>
-        </main>
-        {% endif %}
+    </main>
+    {% endif %}
     </div>
-    
+
     <script>
+        // Функция для получения workflow inputs из URL параметров
+        function getWorkflowInputsFromUrl() {
+            const container = document.getElementById('workflow-form-container');
+            if (!container) return {};
+            try {
+                return JSON.parse(container.dataset.workflowInputs || '{}');
+            } catch (e) {
+                console.error('Failed to parse workflow inputs:', e);
+                return {};
+            }
+        }
         // Функция для инициализации searchable select
         function initSearchableSelect(searchInputId, selectId, dropdownId) {
             const searchInput = document.getElementById(searchInputId);
@@ -149,9 +164,15 @@
             
             if (!searchInput || !select || !dropdown) return;
             
-            function updateDropdown() {
+            // Сохраняем исходное значение для проверки
+            let initialValue = '';
+            // Флаг для отслеживания первого ввода после фокуса
+            let isFirstInput = false;
+            
+            function updateDropdown(filterText = null) {
                 dropdown.innerHTML = '';
-                const searchTerm = searchInput.value.toLowerCase();
+                // Если filterText передан, используем его, иначе берем из поля ввода
+                const searchTerm = (filterText !== null ? filterText : searchInput.value).toLowerCase();
                 
                 Array.from(select.options).forEach(function(option) {
                     if (option.value === '') return;
@@ -169,6 +190,7 @@
                         select.value = option.value;
                         searchInput.value = option.textContent;
                         dropdown.classList.remove('show');
+                        initialValue = option.textContent;
                         updateDropdown();
                         
                         // Загружаем workflow inputs при изменении workflow
@@ -181,25 +203,56 @@
             }
             
             searchInput.addEventListener('focus', function() {
-                updateDropdown();
+                // Сохраняем текущее значение при фокусе
+                initialValue = searchInput.value;
+                isFirstInput = false;
+                // При фокусе показываем все опции (не фильтруем)
+                updateDropdown('');
                 dropdown.classList.add('show');
             });
             
-            searchInput.addEventListener('input', function() {
-                updateDropdown();
-                dropdown.classList.add('show');
+            searchInput.addEventListener('input', function(e) {
+                const currentValue = searchInput.value;
                 
-                // Если пользователь вводит текст, который точно совпадает с опцией - выбираем её
-                const searchTerm = searchInput.value.trim();
-                if (searchTerm) {
-                    Array.from(select.options).forEach(function(option) {
-                        if (option.value === '' || option.value === searchTerm || option.textContent.toLowerCase() === searchTerm.toLowerCase()) {
-                            if (option.value === searchTerm || option.textContent.toLowerCase() === searchTerm.toLowerCase()) {
-                                select.value = option.value;
-                                return;
+                // Если пользователь начал вводить и значение изменилось от исходного
+                if (currentValue !== initialValue) {
+                    // Если это первый ввод и значение начинается с исходного - очищаем поле
+                    if (initialValue && isFirstInput && currentValue.startsWith(initialValue)) {
+                        // Очищаем поле и оставляем только новый ввод
+                        const newValue = currentValue.replace(initialValue, '');
+                        searchInput.value = newValue;
+                        updateDropdown(newValue);
+                        isFirstInput = false;
+                    } else {
+                        // Показываем отфильтрованный список
+                        updateDropdown(currentValue);
+                        isFirstInput = false;
+                    }
+                    dropdown.classList.add('show');
+                    
+                    // Если пользователь вводит текст, который точно совпадает с опцией - выбираем её
+                    const searchTerm = searchInput.value.trim();
+                    if (searchTerm) {
+                        Array.from(select.options).forEach(function(option) {
+                            if (option.value === '' || option.value === searchTerm || option.textContent.toLowerCase() === searchTerm.toLowerCase()) {
+                                if (option.value === searchTerm || option.textContent.toLowerCase() === searchTerm.toLowerCase()) {
+                                    select.value = option.value;
+                                    return;
+                                }
                             }
-                        }
-                    });
+                        });
+                    }
+                }
+            });
+            
+            // При начале ввода (keydown) - если поле содержит исходное значение, отмечаем что это первый ввод
+            searchInput.addEventListener('keydown', function(e) {
+                // Если это не служебная клавиша (стрелки, enter, escape, backspace, delete и т.д.)
+                if (!['ArrowUp', 'ArrowDown', 'Enter', 'Escape', 'Tab', 'Backspace', 'Delete'].includes(e.key) && e.key.length === 1) {
+                    // Если поле содержит исходное значение и пользователь начинает вводить
+                    if (initialValue && searchInput.value === initialValue) {
+                        isFirstInput = true;
+                    }
                 }
             });
             
@@ -353,6 +406,34 @@
                     
                     inputsContainer.innerHTML = html;
                     inputsWrapper.style.display = 'block';
+                    
+                    // Предзаполняем поля значениями из URL параметров
+                    setTimeout(function() {
+                        const workflowInputsFromUrl = getWorkflowInputsFromUrl();
+                        if (workflowInputsFromUrl && Object.keys(workflowInputsFromUrl).length > 0) {
+                            for (const [inputName, inputValue] of Object.entries(workflowInputsFromUrl)) {
+                                const inputElement = document.getElementById(`input_${inputName}`);
+                                if (inputElement) {
+                                    if (inputElement.type === 'checkbox') {
+                                        inputElement.checked = inputValue === 'true' || inputValue === true || inputValue === '1';
+                                    } else if (inputElement.tagName === 'SELECT') {
+                                        // Для select выбираем опцию по значению
+                                        inputElement.value = inputValue;
+                                        // Обновляем связанное поле поиска, если есть
+                                        const searchInput = document.getElementById(`workflow_search`);
+                                        if (searchInput && inputElement.id === 'workflow_id') {
+                                            const selectedOption = inputElement.options[inputElement.selectedIndex];
+                                            if (selectedOption) {
+                                                searchInput.value = selectedOption.textContent;
+                                            }
+                                        }
+                                    } else {
+                                        inputElement.value = inputValue;
+                                    }
+                                }
+                            }
+                        }
+                    }, 100);
                 } else {
                     // Ошибка от сервера
                     const errorText = await response.text();
@@ -639,52 +720,82 @@
             });
         }
         
-        // Функция для копирования ссылки на запуск
-        function setupCopyRunButton() {
-            const copyBtn = document.getElementById('copy-run-btn');
-            if (!copyBtn) {
-                console.warn('Copy run button not found');
-                return;
+        // Общая функция для копирования в буфер обмена с обратной связью
+        function copyToClipboard(text, button) {
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(text).then(function() {
+                    showCopyFeedback(button);
+                }).catch(function(err) {
+                    console.error('Failed to copy:', err);
+                    prompt('Copy this URL:', text);
+                });
+            } else {
+                // Fallback для старых браузеров
+                const textArea = document.createElement('textarea');
+                textArea.value = text;
+                textArea.style.position = 'fixed';
+                textArea.style.left = '-999999px';
+                document.body.appendChild(textArea);
+                textArea.select();
+                try {
+                    document.execCommand('copy');
+                    showCopyFeedback(button);
+                } catch (err) {
+                    console.error('Failed to copy:', err);
+                    prompt('Copy this URL:', text);
+                }
+                document.body.removeChild(textArea);
+            }
+        }
+        
+        // Функция для показа обратной связи после копирования
+        function showCopyFeedback(button) {
+            const originalText = button.textContent;
+            const originalOpacity = button.style.opacity;
+            button.textContent = 'Copied!';
+            button.style.background = '#10b981';
+            button.style.color = '#fff';
+            button.style.opacity = '1';
+            button.style.borderColor = '#10b981';
+            
+            setTimeout(function() {
+                button.textContent = originalText;
+                button.style.background = '#f9fafb';
+                button.style.color = '#6b7280';
+                button.style.opacity = originalOpacity || '0.6';
+                button.style.borderColor = '#d1d5db';
+            }, 2000);
+        }
+        
+        // Функция для получения всех параметров из формы
+        function getFormParams(includeInputs) {
+            const ownerInput = document.getElementById('owner');
+            const repoInput = document.getElementById('repo');
+            const workflowIdSelect = document.getElementById('workflow_id');
+            const refSelect = document.getElementById('ref');
+            
+            if (!ownerInput || !repoInput || !workflowIdSelect || !refSelect) {
+                return null;
             }
             
-            copyBtn.addEventListener('click', function(e) {
-                e.preventDefault();
-                e.stopPropagation();
-                
-                const ownerInput = document.getElementById('owner');
-                const repoInput = document.getElementById('repo');
-                const workflowIdSelect = document.getElementById('workflow_id');
-                const refSelect = document.getElementById('ref');
-                
-                console.log('Copy button clicked', { ownerInput, repoInput, workflowIdSelect, refSelect });
-                
-                if (!ownerInput || !repoInput || !workflowIdSelect || !refSelect) {
-                    alert('Please fill in repository, workflow and branch');
-                    return;
-                }
-                
-                const owner = ownerInput.value.trim();
-                const repo = repoInput.value.trim();
-                const workflowId = workflowIdSelect.value.trim();
-                const ref = refSelect.value.trim();
-                
-                console.log('Values:', { owner, repo, workflowId, ref });
-                
-                if (!owner || !repo || !workflowId || !ref) {
-                    alert('Please fill in repository, workflow and branch');
-                    return;
-                }
-                
-                // Формируем URL для trigger
-                const baseUrl = window.location.origin;
-                const params = new URLSearchParams({
-                    owner: owner,
-                    repo: repo,
-                    workflow_id: workflowId,
-                    ref: ref
-                });
-                
-                // Добавляем все inputs из формы
+            const owner = ownerInput.value.trim();
+            const repo = repoInput.value.trim();
+            const workflowId = workflowIdSelect.value.trim();
+            const ref = refSelect.value.trim();
+            
+            if (!owner || !repo || !workflowId || !ref) {
+                return null;
+            }
+            
+            const params = new URLSearchParams({
+                owner: owner,
+                repo: repo,
+                workflow_id: workflowId,
+                ref: ref
+            });
+            
+            // Добавляем все inputs из формы если нужно
+            if (includeInputs) {
                 const form = document.getElementById('workflowForm');
                 if (form) {
                     const formData = new FormData(form);
@@ -695,66 +806,61 @@
                         }
                     }
                 }
+            }
+            
+            return params;
+        }
+        
+        // Функция для копирования ссылки на запуск (Run link)
+        function setupRunLinkButton() {
+            const runLinkBtn = document.getElementById('run-link-btn');
+            if (!runLinkBtn) {
+                console.warn('Run link button not found');
+                return;
+            }
+            
+            runLinkBtn.addEventListener('click', function(e) {
+                e.preventDefault();
+                e.stopPropagation();
                 
+                const params = getFormParams(true); // includeInputs = true
+                if (!params) {
+                    alert('Please fill in repository, workflow and branch');
+                    return;
+                }
+                
+                const baseUrl = window.location.origin;
                 const triggerUrl = `${baseUrl}/workflow/trigger?${params.toString()}`;
                 
-                console.log('Generated URL:', triggerUrl);
+                copyToClipboard(triggerUrl, runLinkBtn);
+            });
+        }
+        
+        // Функция для копирования ссылки на форму (Form link)
+        function setupFormLinkButton() {
+            const formLinkBtn = document.getElementById('form-link-btn');
+            if (!formLinkBtn) {
+                console.warn('Form link button not found');
+                return;
+            }
+            
+            formLinkBtn.addEventListener('click', function(e) {
+                e.preventDefault();
+                e.stopPropagation();
                 
-                // Копируем в буфер обмена
-                if (navigator.clipboard && navigator.clipboard.writeText) {
-                    navigator.clipboard.writeText(triggerUrl).then(function() {
-                    // Показываем уведомление
-                    const originalText = copyBtn.textContent;
-                    const originalOpacity = copyBtn.style.opacity;
-                    copyBtn.textContent = 'Copied!';
-                    copyBtn.style.background = '#10b981';
-                    copyBtn.style.color = '#fff';
-                    copyBtn.style.opacity = '1';
-                    copyBtn.style.borderColor = '#10b981';
-                    
-                    setTimeout(function() {
-                        copyBtn.textContent = originalText;
-                        copyBtn.style.background = '#f9fafb';
-                        copyBtn.style.color = '#6b7280';
-                        copyBtn.style.opacity = originalOpacity || '0.6';
-                        copyBtn.style.borderColor = '#d1d5db';
-                    }, 2000);
-                    }).catch(function(err) {
-                        console.error('Failed to copy:', err);
-                        // Fallback: показываем URL в prompt
-                        prompt('Copy this URL:', triggerUrl);
-                    });
-                } else {
-                    // Fallback для старых браузеров
-                    const textArea = document.createElement('textarea');
-                    textArea.value = triggerUrl;
-                    textArea.style.position = 'fixed';
-                    textArea.style.left = '-999999px';
-                    document.body.appendChild(textArea);
-                    textArea.select();
-                    try {
-                        document.execCommand('copy');
-                        const originalText = copyBtn.textContent;
-                        const originalOpacity = copyBtn.style.opacity;
-                        copyBtn.textContent = 'Copied!';
-                        copyBtn.style.background = '#10b981';
-                        copyBtn.style.color = '#fff';
-                        copyBtn.style.opacity = '1';
-                        copyBtn.style.borderColor = '#10b981';
-                        
-                        setTimeout(function() {
-                            copyBtn.textContent = originalText;
-                            copyBtn.style.background = '#f9fafb';
-                            copyBtn.style.color = '#6b7280';
-                            copyBtn.style.opacity = originalOpacity || '0.6';
-                            copyBtn.style.borderColor = '#d1d5db';
-                        }, 2000);
-                    } catch (err) {
-                        console.error('Failed to copy:', err);
-                        prompt('Copy this URL:', triggerUrl);
-                    }
-                    document.body.removeChild(textArea);
+                const params = getFormParams(true); // includeInputs = true
+                if (!params) {
+                    alert('Please fill in repository, workflow and branch');
+                    return;
                 }
+                
+                // Добавляем ui=true для открытия предзаполненной формы
+                params.append('ui', 'true');
+                
+                const baseUrl = window.location.origin;
+                const formUrl = `${baseUrl}/workflow/trigger?${params.toString()}`;
+                
+                copyToClipboard(formUrl, formLinkBtn);
             });
         }
         
@@ -764,7 +870,26 @@
             initSearchableSelect('branch_search', 'ref', 'branch_dropdown');
             setupRepositoryField();
             setupFormValidation();
-            setupCopyRunButton();
+            setupRunLinkButton();
+            setupFormLinkButton();
+            
+            // Если workflow_id уже выбран и есть owner/repo, загружаем workflow inputs
+            const ownerInput = document.getElementById('owner');
+            const repoInput = document.getElementById('repo');
+            const workflowIdSelect = document.getElementById('workflow_id');
+            
+            if (ownerInput && repoInput && workflowIdSelect) {
+                const owner = ownerInput.value.trim();
+                const repo = repoInput.value.trim();
+                const workflowId = workflowIdSelect.value.trim();
+                
+                if (owner && repo && workflowId) {
+                    // Небольшая задержка, чтобы форма успела инициализироваться
+                    setTimeout(function() {
+                        loadWorkflowInputs();
+                    }, 500);
+                }
+            }
         }
         
         if (document.readyState === 'loading') {

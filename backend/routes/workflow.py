@@ -173,7 +173,7 @@ async def trigger_workflow_get(
     accept_header = request.headers.get("Accept", "")
     return_json = not ui and "application/json" in accept_header
     
-    # Если нужна форма - редирект на главную страницу
+    # Если нужна форма - редирект на главную страницу со всеми параметрами
     if ui:
         params = []
         if owner:
@@ -184,6 +184,18 @@ async def trigger_workflow_get(
             params.append(f"workflow_id={workflow_id}")
         if ref and ref != "main":
             params.append(f"ref={ref}")
+        
+        # Добавляем все остальные параметры (workflow inputs)
+        query_params = dict(request.query_params)
+        excluded_params = {"owner", "repo", "workflow_id", "ref", "ui", "tests"}
+        for key, value in query_params.items():
+            if key not in excluded_params and value:
+                params.append(f"{key}={value}")
+        
+        # Если есть tests, добавляем его
+        if tests:
+            params.append(f"tests={tests}")
+        
         query_string = "&".join(params)
         return RedirectResponse(url=f"/?{query_string}")
     
