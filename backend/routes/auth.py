@@ -29,7 +29,12 @@ async def github_login(request: Request, redirect_after: str = None):
             if redirect_after:
                 request.session["oauth_redirect_after"] = redirect_after
         
-        logger.info(f"OAuth login initiated, state generated: {state[:10]}..., redirect_after: {request.session.get('oauth_redirect_after', 'not set')}")
+        # Verify state was saved
+        saved_state = request.session.get("oauth_state")
+        logger.info(f"OAuth login initiated, state generated: {state[:10]}..., saved in session: {saved_state[:10] if saved_state else 'NOT SAVED'}..., redirect_after: {request.session.get('oauth_redirect_after', 'not set')}")
+        
+        if not saved_state or saved_state != state:
+            logger.error(f"CRITICAL: State was not saved correctly! Generated: {state}, Saved: {saved_state}")
         
         # Redirect to GitHub OAuth
         oauth_url = get_oauth_url(state=state)
@@ -48,20 +53,60 @@ async def github_login(request: Request, redirect_after: str = None):
 
 
 @router.get("/github/callback")
-async def github_callback(request: Request, code: str = None, state: str = None):
+async def github_callback(request: Request, code: str = None, state: str = None, error: str = None, error_description: str = None):
     """Handle GitHub OAuth callback"""
-    logger.info(f"OAuth callback received - code: {'present' if code else 'missing'}, state: {state[:20] if state else 'missing'}...")
+    logger.info(f"OAuth callback received - code: {'present' if code else 'missing'}, state: {state[:20] if state else 'missing'}, error: {error}")
+    
+    # Check for OAuth errors from GitHub
+    if error:
+        error_msg = f"GitHub OAuth error: {error}"
+        if error_description:
+            error_msg += f" - {error_description}"
+        logger.error(error_msg)
+        raise HTTPException(
+            status_code=400,
+            detail=error_msg
+        )
     
     # Verify state
     session_state = request.session.get("oauth_state")
-    logger.info(f"Session state: {session_state[:20] if session_state else 'missing'}...")
+    logger.info(f"Session state from storage: {session_state[:20] if session_state else 'missing'}...")
+    logger.info(f"State from GitHub: {state[:20] if state else 'missing'}...")
     
-    if not session_state or session_state != state:
-        logger.error(f"State mismatch! Session: {session_state[:20] if session_state else 'None'}, Received: {state[:20] if state else 'None'}")
-        raise HTTPException(status_code=400, detail="Invalid state parameter")
+    # Log session info for debugging
+    try:
+        session_keys = list(request.session.keys())
+        logger.info(f"Session keys present: {session_keys}")
+    except:
+        logger.warning("Could not list session keys")
+    
+    if not session_state:
+        logger.error("No oauth_state found in session. This usually means:")
+        logger.error("  1. Session was lost between OAuth start and callback")
+        logger.error("  2. Session cookie was not sent/received properly")
+        logger.error("  3. Different domain/protocol between requests")
+        logger.error("  4. Browser blocked the session cookie (e.g., third-party cookie blocking)")
+        raise HTTPException(
+            status_code=400, 
+            detail="Invalid state parameter: session state not found. This may indicate a session cookie issue. Please try again or check browser cookie settings."
+        )
+    
+    if session_state != state:
+        logger.error(f"State mismatch!")
+        logger.error(f"  Session state: {session_state}")
+        logger.error(f"  Received state: {state}")
+        logger.error(f"  States match: {session_state == state}")
+        raise HTTPException(
+            status_code=400, 
+            detail="Invalid state parameter: state mismatch. This may indicate a CSRF attack or session issue."
+        )
     
     if not code:
         logger.error("Authorization code not provided in callback")
+        # Check if there are any error parameters
+        error_params = dict(request.query_params)
+        if error_params:
+            logger.error(f"Callback query parameters: {error_params}")
         raise HTTPException(status_code=400, detail="Authorization code not provided")
     
     try:

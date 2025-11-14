@@ -47,7 +47,17 @@ app.add_middleware(LoggingMiddleware)
 
 # Add session middleware for OAuth
 secret_key = os.getenv("SECRET_KEY", "change-this-secret-key-in-production")
-app.add_middleware(SessionMiddleware, secret_key=secret_key)
+# Configure session middleware with cookie settings
+# SameSite="lax" allows cookies to be sent on top-level navigations (like OAuth redirects)
+# httponly=True prevents JavaScript access to cookies (security)
+# max_age=3600 sets session to expire after 1 hour
+app.add_middleware(
+    SessionMiddleware, 
+    secret_key=secret_key,
+    max_age=3600,  # 1 hour
+    same_site="lax",  # Allows cookies on OAuth redirects
+    https_only=False  # Set to False for HTTP (should be True in production with HTTPS)
+)
 
 # Mount static files
 app.mount("/static", StaticFiles(directory="frontend/static"), name="static")
