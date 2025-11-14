@@ -76,6 +76,7 @@
                             <div class="spinner-small"></div>
                         </div>
                     </div>
+                    <div id="branch-error" class="error-state" style="display: none; margin-top: 8px;"></div>
                 </div>
                 
                 <div class="form-group">
@@ -109,6 +110,7 @@
                             <div class="spinner-small"></div>
                         </div>
                     </div>
+                    <div id="workflow-error" class="error-state" style="display: none; margin-top: 8px;"></div>
                 </div>
 
                 {# Динамические поля для workflow inputs #}
@@ -358,6 +360,12 @@
             if (branchLoader) branchLoader.style.display = 'flex';
             if (workflowLoader) workflowLoader.style.display = 'flex';
             
+            // Скрываем предыдущие ошибки
+            const branchError = document.getElementById('branch-error');
+            const workflowError = document.getElementById('workflow-error');
+            if (branchError) branchError.style.display = 'none';
+            if (workflowError) workflowError.style.display = 'none';
+            
             try {
                 // Формируем URL для branches (без env параметра, фильтрация из конфига)
                 const branchesUrl = `/api/branches?owner=${encodeURIComponent(owner)}&repo=${encodeURIComponent(repo)}`;
@@ -367,21 +375,62 @@
                     fetch(`/api/workflows?owner=${encodeURIComponent(owner)}&repo=${encodeURIComponent(repo)}`)
                 ]);
                 
+                // Обработка branches
                 if (branchesResponse.ok) {
                     const branchesData = await branchesResponse.json();
                     updateSelect('ref', branchesData.branches, 'main');
                     initSearchableSelect('branch_search', 'ref', 'branch_dropdown');
+                    if (branchError) branchError.style.display = 'none';
+                } else {
+                    // Показываем ошибку для branches
+                    let errorMessage = 'Failed to load branches';
+                    try {
+                        const errorData = await branchesResponse.json();
+                        errorMessage = errorData.detail || errorMessage;
+                    } catch (e) {
+                        errorMessage = `Failed to load branches: ${branchesResponse.status} ${branchesResponse.statusText}`;
+                    }
+                    if (branchError) {
+                        branchError.textContent = errorMessage;
+                        branchError.style.display = 'block';
+                    }
+                    console.error('Failed to load branches:', errorMessage);
                 }
                 
+                // Обработка workflows
                 if (workflowsResponse.ok) {
                     const workflowsData = await workflowsResponse.json();
                     updateSelect('workflow_id', workflowsData.workflows.map(w => ({id: w.id, name: w.name})), null);
                     initSearchableSelect('workflow_search', 'workflow_id', 'workflow_dropdown');
                     // Загружаем inputs для выбранного workflow
                     loadWorkflowInputs();
+                    if (workflowError) workflowError.style.display = 'none';
+                } else {
+                    // Показываем ошибку для workflows
+                    let errorMessage = 'Failed to load workflows';
+                    try {
+                        const errorData = await workflowsResponse.json();
+                        errorMessage = errorData.detail || errorMessage;
+                    } catch (e) {
+                        errorMessage = `Failed to load workflows: ${workflowsResponse.status} ${workflowsResponse.statusText}`;
+                    }
+                    if (workflowError) {
+                        workflowError.textContent = errorMessage;
+                        workflowError.style.display = 'block';
+                    }
+                    console.error('Failed to load workflows:', errorMessage);
                 }
             } catch (error) {
                 console.error('Failed to load branches/workflows:', error);
+                // Показываем общую ошибку
+                if (branchError) {
+                    branchError.textContent = `Error: ${error.message}`;
+                    branchError.style.display = 'block';
+                }
+                if (workflowError) {
+                    workflowError.textContent = `Error: ${error.message}`;
+                    workflowError.style.display = 'block';
+                }
             } finally {
                 // Скрываем спиннеры
                 if (branchLoader) branchLoader.style.display = 'none';
@@ -472,6 +521,20 @@
         function setupFormValidation() {
             const form = document.getElementById('workflowForm');
             if (!form) return;
+            
+            // Блокируем отправку формы по Enter во всех полях ввода
+            form.addEventListener('keydown', function(e) {
+                if (e.key === 'Enter') {
+                    // Разрешаем Enter только на кнопке submit
+                    if (e.target.tagName === 'BUTTON' && e.target.type === 'submit') {
+                        return true; // Разрешаем отправку только при явном клике на кнопку
+                    }
+                    // Блокируем Enter во всех остальных случаях
+                    e.preventDefault();
+                    e.stopPropagation();
+                    return false;
+                }
+            });
             
             form.addEventListener('submit', function(e) {
                 const repositoryInput = document.getElementById('repository');
