@@ -271,23 +271,31 @@ header h1 {
 }
 
 .btn-primary:active:not(:disabled) {
-    background: #e5e7eb;
+    background: #10b981;  /* Зеленый цвет при нажатии */
+    color: white;
+    border-color: #059669;
 }
 
 .btn-primary:disabled {
-    background: #f3f4f6;
-    color: #9ca3af;
-    cursor: not-allowed;
-    opacity: 0.6;
-    pointer-events: none;
+    background: #e5e7eb !important;
+    color: #9ca3af !important;
+    cursor: not-allowed !important;
+    opacity: 0.5 !important;
+    pointer-events: none !important;
+    border-color: #d1d5db !important;
+    box-shadow: none !important;
 }
 
 .btn-secondary {
     background: #f9fafb;
+    border-color: #6b7280;  /* Темнее обводка */
+    color: #374151;  /* Темнее текст */
 }
 
 .btn-secondary:hover:not(:disabled) {
     background: #f3f4f6;
+    border-color: #4b5563;
+    color: #1f2937;
 }
 
 .btn-secondary:disabled {
@@ -312,7 +320,7 @@ header h1 {
     text-align: center;
     padding: 40px 32px;
     border-radius: 8px;
-    margin-top: 32px;
+    margin-top: 0;
     border: 1px solid #d1d5db;
 }
 
@@ -539,6 +547,22 @@ header h1 {
 .btn-small {
     padding: 6px 16px;
     font-size: 13px;
+}
+
+/* Permission message */
+#permission-message {
+    padding: 10px 12px;
+    border-radius: 6px;
+    font-size: 14px;
+    line-height: 1.4;
+    margin-top: 8px;
+}
+
+#permission-message:not(:empty) {
+    background: #fff5f5;  /* Нежно-розовый фон */
+    border: 1px solid #fce7e7;  /* Мягкая розовая граница */
+    color: #6b7280;  /* Серый текст */
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);  /* Легкая тень для глубины */
 }
 
 /* Responsive */

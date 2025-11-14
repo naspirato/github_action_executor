@@ -16,10 +16,11 @@ async def trigger_workflow(
     repo: str,
     workflow_id: str,
     inputs: dict = None,
-    ref: str = "main"
+    ref: str = "main",
+    user_token: str = None
 ) -> dict:
     """
-    Trigger a GitHub Actions workflow using GitHub App authentication
+    Trigger a GitHub Actions workflow using GitHub App or user OAuth token
     
     Args:
         owner: Repository owner
@@ -27,26 +28,34 @@ async def trigger_workflow(
         workflow_id: Workflow file name (e.g., "ci.yml") or workflow ID
         inputs: Input parameters for workflow_dispatch
         ref: Branch or tag to run workflow on (default: "main")
+        user_token: Optional user OAuth token. If provided, workflow will be triggered as this user.
+                   If None, uses GitHub App authentication.
         
     Returns:
         Response dictionary with status and message
     """
-    # Get GitHub App credentials
-    app_id = os.getenv("GITHUB_APP_ID")
-    installation_id = os.getenv("GITHUB_APP_INSTALLATION_ID")
-    private_key_path = os.getenv("GITHUB_APP_PRIVATE_KEY_PATH")
-    
-    if not all([app_id, installation_id]):
-        raise ValueError("GITHUB_APP_ID and GITHUB_APP_INSTALLATION_ID must be set")
-    
-    # Load private key and get installation token
-    private_key = load_private_key(private_key_path)
-    installation_token = await get_installation_token(app_id, installation_id, private_key)
+    # Use user token if provided, otherwise use GitHub App
+    if user_token:
+        auth_token = user_token
+        logger.info(f"Triggering workflow {owner}/{repo}/{workflow_id} as authenticated user")
+    else:
+        # Get GitHub App credentials
+        app_id = os.getenv("GITHUB_APP_ID")
+        installation_id = os.getenv("GITHUB_APP_INSTALLATION_ID")
+        private_key_path = os.getenv("GITHUB_APP_PRIVATE_KEY_PATH")
+        
+        if not all([app_id, installation_id]):
+            raise ValueError("GITHUB_APP_ID and GITHUB_APP_INSTALLATION_ID must be set")
+        
+        # Load private key and get installation token
+        private_key = load_private_key(private_key_path)
+        auth_token = await get_installation_token(app_id, installation_id, private_key)
+        logger.info(f"Triggering workflow {owner}/{repo}/{workflow_id} as GitHub App")
     
     # Trigger workflow
     url = f"https://api.github.com/repos/{owner}/{repo}/actions/workflows/{workflow_id}/dispatches"
     headers = {
-        "Authorization": f"token {installation_token}",
+        "Authorization": f"token {auth_token}",
         "Accept": "application/vnd.github.v3+json"
     }
     
@@ -80,6 +89,7 @@ async def trigger_workflow(
         except:
             error_message = str(e)
         
+        logger.error(f"Failed to trigger workflow: {error_message} (status: {e.response.status_code})")
         return {
             "success": False,
             "status_code": e.response.status_code,
@@ -92,10 +102,12 @@ async def find_workflow_run(
     repo: str,
     workflow_id: str,
     trigger_time: datetime,
-    ref: str = None
+    ref: str = None,
+    user_token: str = None,
+    expected_actor_login: str = None
 ) -> dict:
     """
-    Find workflow run by trigger time and actor (GitHub App)
+    Find workflow run by trigger time and actor (GitHub App or User)
     
     Args:
         owner: Repository owner
@@ -103,43 +115,56 @@ async def find_workflow_run(
         workflow_id: Workflow ID
         trigger_time: When workflow was triggered (datetime object)
         ref: Optional branch name to filter by
+        user_token: Optional user OAuth token. If provided, searches for runs triggered by this user.
+        expected_actor_login: Optional expected actor login (username). Used when searching for user-triggered runs.
         
     Returns:
         Run data if found, None otherwise
     """
-    # Get GitHub App credentials
-    app_id = os.getenv("GITHUB_APP_ID")
-    installation_id = os.getenv("GITHUB_APP_INSTALLATION_ID")
-    private_key_path = os.getenv("GITHUB_APP_PRIVATE_KEY_PATH")
-    
-    if not all([app_id, installation_id]):
-        raise ValueError("GITHUB_APP_ID and GITHUB_APP_INSTALLATION_ID must be set")
-    
-    # Load private key and get installation token
-    private_key = load_private_key(private_key_path)
-    installation_token = await get_installation_token(app_id, installation_id, private_key)
+    # Use user token if provided, otherwise use GitHub App
+    if user_token:
+        auth_token = user_token
+        logger.info(f"Searching for workflow run {owner}/{repo}/{workflow_id} triggered by user")
+    else:
+        # Get GitHub App credentials
+        app_id = os.getenv("GITHUB_APP_ID")
+        installation_id = os.getenv("GITHUB_APP_INSTALLATION_ID")
+        private_key_path = os.getenv("GITHUB_APP_PRIVATE_KEY_PATH")
+        
+        if not all([app_id, installation_id]):
+            raise ValueError("GITHUB_APP_ID and GITHUB_APP_INSTALLATION_ID must be set")
+        
+        # Load private key and get installation token
+        private_key = load_private_key(private_key_path)
+        auth_token = await get_installation_token(app_id, installation_id, private_key)
+        logger.info(f"Searching for workflow run {owner}/{repo}/{workflow_id} triggered by GitHub App")
     
     headers = {
-        "Authorization": f"token {installation_token}",
+        "Authorization": f"token {auth_token}",
         "Accept": "application/vnd.github.v3+json"
     }
     
     async with httpx.AsyncClient() as client:
-        # Get app info to identify actor
-        app_url = f"https://api.github.com/app"
-        app_headers = {
-            "Authorization": f"Bearer {generate_jwt(app_id, private_key)}",
-            "Accept": "application/vnd.github.v3+json"
-        }
-        
+        # Get app info to identify actor (only if using GitHub App)
         app_slug = None
-        try:
-            app_response = await client.get(app_url, headers=app_headers)
-            if app_response.status_code == 200:
-                app_data = app_response.json()
-                app_slug = app_data.get("slug")  # e.g., "github-action-executor"
-        except Exception:
-            pass  # Если не удалось получить app info, будем искать по времени
+        if not user_token:
+            app_id = os.getenv("GITHUB_APP_ID")
+            private_key_path = os.getenv("GITHUB_APP_PRIVATE_KEY_PATH")
+            if app_id and private_key_path:
+                private_key = load_private_key(private_key_path)
+                app_url = f"https://api.github.com/app"
+                app_headers = {
+                    "Authorization": f"Bearer {generate_jwt(app_id, private_key)}",
+                    "Accept": "application/vnd.github.v3+json"
+                }
+                
+                try:
+                    app_response = await client.get(app_url, headers=app_headers)
+                    if app_response.status_code == 200:
+                        app_data = app_response.json()
+                        app_slug = app_data.get("slug")  # e.g., "github-action-executor"
+                except Exception:
+                    pass  # Если не удалось получить app info, будем искать по времени
         
         # Get workflow runs
         runs_url = f"https://api.github.com/repos/{owner}/{repo}/actions/workflows/{workflow_id}/runs"
@@ -180,26 +205,34 @@ async def find_workflow_run(
                     
                     # Проверяем, что run создан в нашем временном окне
                     if time_window_start <= created_at <= time_window_end:
-                        # Check if actor is our GitHub App
-                        is_our_app = False
+                        is_match = False
                         
-                        if app_slug:
-                            # Проверяем по slug
-                            if (actor_login == app_slug or 
-                                actor_login == f"{app_slug}[bot]"):
-                                is_our_app = True
+                        if user_token and expected_actor_login:
+                            # Ищем run от имени пользователя
+                            if actor_login == expected_actor_login and actor_type == "User":
+                                is_match = True
+                                logger.debug(f"Found candidate user run: id={run.get('id')}, created_at={created_at_str}, actor={actor_login}")
+                        else:
+                            # Ищем run от имени GitHub App
+                            if app_slug:
+                                # Проверяем по slug
+                                if (actor_login == app_slug or 
+                                    actor_login == f"{app_slug}[bot]"):
+                                    is_match = True
+                            
+                            # Также проверяем по типу Bot
+                            # GitHub Apps всегда имеют type="Bot"
+                            if actor_type == "Bot":
+                                # Если app_slug не совпал, но это бот и время совпадает,
+                                # считаем что это наш запуск (вероятность другого бота низкая)
+                                if not app_slug or is_match:
+                                    is_match = True
+                            
+                            if is_match:
+                                logger.debug(f"Found candidate app run: id={run.get('id')}, created_at={created_at_str}, actor={actor_login}")
                         
-                        # Также проверяем по типу Bot
-                        # GitHub Apps всегда имеют type="Bot"
-                        if actor_type == "Bot":
-                            # Если app_slug не совпал, но это бот и время совпадает,
-                            # считаем что это наш запуск (вероятность другого бота низкая)
-                            if not app_slug or is_our_app:
-                                is_our_app = True
-                        
-                        if is_our_app:
+                        if is_match:
                             candidate_runs.append((created_at, run))
-                            logger.debug(f"Found candidate run: id={run.get('id')}, created_at={created_at_str}, actor={actor_login}")
                 except (ValueError, AttributeError) as e:
                     logger.debug(f"Error parsing created_at for run: {e}")
                     pass

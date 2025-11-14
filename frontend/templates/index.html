@@ -116,10 +116,10 @@
                 
                 <div style="display: flex; gap: 12px; align-items: center;">
                     <button type="submit" id="runButton" class="btn btn-primary" style="flex: 1;" disabled>Run workflow</button>
-                    <button type="button" id="run-link-btn" class="btn btn-secondary" style="flex: 0 0 auto; opacity: 0.6; font-size: 13px; padding: 8px 16px; border-color: #d1d5db; background: #f9fafb; color: #6b7280;">Run link</button>
-                    <button type="button" id="form-link-btn" class="btn btn-secondary" style="flex: 0 0 auto; opacity: 0.6; font-size: 13px; padding: 8px 16px; border-color: #d1d5db; background: #f9fafb; color: #6b7280;">Form link</button>
+                    <button type="button" id="run-link-btn" class="btn btn-secondary" style="flex: 0 0 auto; font-size: 13px; padding: 8px 16px;">Run link</button>
+                    <button type="button" id="form-link-btn" class="btn btn-secondary" style="flex: 0 0 auto; font-size: 13px; padding: 8px 16px;">Form link</button>
                 </div>
-                <div id="permission-message" style="margin-top: 10px; color: #6b7280; font-size: 0.9em;"></div>
+                <div id="permission-message"></div>
                 </form>
             
             <footer class="page-footer">
@@ -395,6 +395,12 @@
             const inputsContainer = document.getElementById('workflow-inputs');
             const inputsWrapper = document.getElementById('workflow-inputs-wrapper');
             
+            // Reset workflow_dispatch flag when workflow changes
+            const runButton = document.getElementById('runButton');
+            if (runButton) {
+                runButton.setAttribute('data-has-workflow-dispatch', 'true');  // Reset to default
+            }
+            
             if (!owner || !repo || !workflowId || !inputsContainer || !inputsWrapper) {
                 inputsContainer.innerHTML = '';
                 inputsWrapper.style.display = 'none';
@@ -410,6 +416,36 @@
                 if (response.ok) {
                     const data = await response.json();
                     const inputs = data.inputs || {};
+                    const hasWorkflowDispatch = data.has_workflow_dispatch !== false;  // Default to true if not specified
+                    
+                    // Check if workflow supports manual trigger
+                    const runButton = document.getElementById('runButton');
+                    const permissionMessage = document.getElementById('permission-message');
+                    
+                    // Store workflow_dispatch support in button data attribute
+                    if (runButton) {
+                        runButton.setAttribute('data-has-workflow-dispatch', hasWorkflowDispatch);
+                    }
+                    
+                    if (!hasWorkflowDispatch) {
+                        // Disable button and show message if workflow doesn't support manual trigger
+                        if (runButton) {
+                            runButton.disabled = true;
+                            runButton.style.opacity = '0.5';
+                            runButton.style.cursor = 'not-allowed';
+                        }
+                        if (permissionMessage) {
+                            permissionMessage.textContent = 'This workflow is not configured for manual trigger (workflow_dispatch)';
+                            permissionMessage.style.display = 'block';
+                        }
+                    } else {
+                        // Clear workflow_dispatch message if it exists
+                        if (permissionMessage && permissionMessage.textContent.includes('workflow_dispatch')) {
+                            permissionMessage.textContent = '';
+                            permissionMessage.style.display = 'none';
+                        }
+                        // Don't change button state here - let permission check handle it
+                    }
                     
                     if (Object.keys(inputs).length === 0) {
                         inputsContainer.innerHTML = '';
@@ -889,6 +925,9 @@
             // If owner or repo are empty, disable button and show message
             if (!owner || !repo) {
                 runButton.disabled = true;
+                runButton.style.opacity = '0.5';
+                runButton.style.cursor = 'not-allowed';
+                permissionMessage.style.display = 'block';
                 permissionMessage.textContent = 'Please enter repository owner and name';
                 return;
             }
@@ -899,6 +938,9 @@
                 if (response.status === 401) {
                     // Not authenticated
                     runButton.disabled = true;
+                    runButton.style.opacity = '0.5';
+                    runButton.style.cursor = 'not-allowed';
+                    permissionMessage.style.display = 'block';
                     permissionMessage.textContent = 'Please sign in with GitHub to run workflows';
                     return;
                 }
@@ -909,29 +951,41 @@
                 
                 const data = await response.json();
                 
-                if (data.can_trigger) {
+                // Check if workflow supports manual trigger before enabling button
+                const hasWorkflowDispatch = runButton.getAttribute('data-has-workflow-dispatch') !== 'false';
+                
+                if (data.can_trigger && hasWorkflowDispatch) {
                     runButton.disabled = false;
+                    runButton.style.opacity = '1';
+                    runButton.style.cursor = 'pointer';
                     permissionMessage.textContent = '';
-                    if (data.user_role === 'contributor') {
-                        console.log(`User ${data.username} is a contributor to ${owner}/${repo}`);
-                    } else if (data.user_role === 'collaborator') {
+                    permissionMessage.style.display = 'none';
+                    if (data.user_role === 'collaborator') {
                         console.log(`User ${data.username} is a collaborator of ${owner}/${repo}`);
                     }
                 } else {
                     runButton.disabled = true;
-                    // Show appropriate message based on configuration
-                    if (data.allow_contributors_only) {
-                        permissionMessage.textContent = `You are not a contributor of ${owner}/${repo}. Only contributors can trigger workflows.`;
+                    runButton.style.opacity = '0.5';
+                    runButton.style.cursor = 'not-allowed';
+                    permissionMessage.style.display = 'block';
+                    
+                    // Check if workflow doesn't support manual trigger
+                    const hasWorkflowDispatch = runButton.getAttribute('data-has-workflow-dispatch') !== 'false';
+                    if (!hasWorkflowDispatch) {
+                        permissionMessage.textContent = 'This workflow is not configured for manual trigger (workflow_dispatch)';
                     } else {
-                        permissionMessage.textContent = `You are not a contributor or collaborator of ${owner}/${repo}`;
+                        permissionMessage.textContent = `You are not a collaborator of ${owner}/${repo}. Only collaborators can trigger workflows.`;
+                        console.log(`User ${data.username} (${data.user_role}) does NOT have permission to trigger workflows in ${owner}/${repo}`);
                     }
-                    console.log(`User ${data.username} (${data.user_role}) does NOT have permission to trigger workflows in ${owner}/${repo}`);
                 }
             } catch (error) {
                 console.error('Error checking permissions:', error);
                 // In case of error, allow attempt (check will be on server)
                 runButton.disabled = false;
+                runButton.style.opacity = '1';
+                runButton.style.cursor = 'pointer';
                 permissionMessage.textContent = '';
+                permissionMessage.style.display = 'none';
             }
         }
         
@@ -943,6 +997,12 @@
             setupFormValidation();
             setupRunLinkButton();
             setupFormLinkButton();
+            
+            // Initialize workflow_dispatch support flag (default to true until checked)
+            const runButton = document.getElementById('runButton');
+            if (runButton) {
+                runButton.setAttribute('data-has-workflow-dispatch', 'true');
+            }
             
             // Setup permission checking on owner/repo changes
             const ownerInput = document.getElementById('owner');
@@ -974,6 +1034,11 @@
             let permissionCheckTimeout;
             
             function handleOwnerRepoChange() {
+                // Reset workflow_dispatch flag when repository changes
+                const runButton = document.getElementById('runButton');
+                if (runButton) {
+                    runButton.setAttribute('data-has-workflow-dispatch', 'true');  // Reset to default
+                }
                 clearTimeout(permissionCheckTimeout);
                 permissionCheckTimeout = setTimeout(checkUserPermissions, 500);
             }
