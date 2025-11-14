@@ -15,25 +15,36 @@ router = APIRouter()
 @router.get("/github")
 async def github_login(request: Request, redirect_after: str = None):
     """Initiate GitHub OAuth login"""
-    # Generate state for CSRF protection
-    state = secrets.token_urlsafe(32)
-    request.session["oauth_state"] = state
-    
-    # Save redirect URL if provided
-    if redirect_after:
-        request.session["oauth_redirect_after"] = redirect_after
-    elif "oauth_redirect_after" not in request.session:
-        # Get redirect_after from query parameter if not in session
-        redirect_after = request.query_params.get("redirect_after")
+    try:
+        # Generate state for CSRF protection
+        state = secrets.token_urlsafe(32)
+        request.session["oauth_state"] = state
+        
+        # Save redirect URL if provided
         if redirect_after:
             request.session["oauth_redirect_after"] = redirect_after
-    
-    logger.info(f"OAuth login initiated, state generated: {state[:10]}..., redirect_after: {request.session.get('oauth_redirect_after', 'not set')}")
-    
-    # Redirect to GitHub OAuth
-    oauth_url = get_oauth_url(state=state)
-    logger.info(f"Redirecting to GitHub OAuth: {oauth_url[:100]}...")
-    return RedirectResponse(url=oauth_url)
+        elif "oauth_redirect_after" not in request.session:
+            # Get redirect_after from query parameter if not in session
+            redirect_after = request.query_params.get("redirect_after")
+            if redirect_after:
+                request.session["oauth_redirect_after"] = redirect_after
+        
+        logger.info(f"OAuth login initiated, state generated: {state[:10]}..., redirect_after: {request.session.get('oauth_redirect_after', 'not set')}")
+        
+        # Redirect to GitHub OAuth
+        oauth_url = get_oauth_url(state=state)
+        logger.info(f"Redirecting to GitHub OAuth (full URL logged above)")
+        return RedirectResponse(url=oauth_url)
+    except ValueError as e:
+        # GITHUB_CLIENT_ID is not set
+        logger.error(f"OAuth configuration error: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"OAuth configuration error: {str(e)}. Please check your environment variables."
+        )
+    except Exception as e:
+        logger.error(f"Unexpected error initiating OAuth: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to initiate OAuth: {str(e)}")
 
 
 @router.get("/github/callback")
@@ -99,4 +110,50 @@ async def get_current_user(request: Request):
     if not user:
         raise HTTPException(status_code=401, detail="Not authenticated")
     return user
+
+
+@router.get("/config")
+async def get_oauth_config(request: Request):
+    """
+    Diagnostic endpoint to check OAuth configuration
+    Returns configuration info (without sensitive data) to help troubleshoot OAuth issues
+    """
+    import os
+    from urllib.parse import urlencode
+    
+    client_id = os.getenv("GITHUB_CLIENT_ID")
+    callback_url = os.getenv("GITHUB_CALLBACK_URL", "http://localhost:8000/auth/github/callback")
+    client_secret_set = bool(os.getenv("GITHUB_CLIENT_SECRET"))
+    
+    config_info = {
+        "client_id_set": bool(client_id),
+        "client_id_preview": client_id[:10] + "..." if client_id else None,
+        "callback_url": callback_url,
+        "client_secret_set": client_secret_set,
+        "oauth_url": None,
+        "troubleshooting": {
+            "common_issues": [
+                "404 error usually means:",
+                "  1. Client ID is incorrect or doesn't exist in GitHub",
+                "  2. Callback URL doesn't match GitHub OAuth App settings",
+                "  3. OAuth App was deleted or deactivated",
+                "",
+                "To fix:",
+                "  1. Go to https://github.com/settings/developers",
+                "  2. Find your OAuth App (or create a new one)",
+                f"  3. Ensure 'Authorization callback URL' is exactly: {callback_url}",
+                f"  4. Ensure 'Client ID' matches: {client_id[:10] + '...' if client_id else 'NOT SET'}"
+            ]
+        }
+    }
+    
+    if client_id:
+        try:
+            from backend.services.github_oauth import get_oauth_url
+            oauth_url = get_oauth_url()
+            config_info["oauth_url"] = oauth_url
+        except Exception as e:
+            config_info["oauth_url_error"] = str(e)
+    
+    return config_info
 

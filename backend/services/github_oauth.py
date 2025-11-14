@@ -23,9 +23,16 @@ def get_oauth_url(state: str = None) -> str:
         
     Returns:
         OAuth authorization URL
+        
+    Raises:
+        ValueError: If GITHUB_CLIENT_ID is not set
     """
     client_id = os.getenv("GITHUB_CLIENT_ID")
     callback_url = os.getenv("GITHUB_CALLBACK_URL", "http://localhost:8000/auth/github/callback")
+    
+    if not client_id:
+        logger.error("GITHUB_CLIENT_ID is not set. Please set it in your environment variables.")
+        raise ValueError("GITHUB_CLIENT_ID is not set. Please configure it in your environment variables.")
     
     params = {
         "client_id": client_id,
@@ -36,7 +43,11 @@ def get_oauth_url(state: str = None) -> str:
     if state:
         params["state"] = state
     
-    return f"{GITHUB_AUTH_URL}?{urlencode(params)}"
+    oauth_url = f"{GITHUB_AUTH_URL}?{urlencode(params)}"
+    logger.info(f"Generated OAuth URL - Client ID: {client_id}, Callback URL: {callback_url}")
+    logger.info(f"Full OAuth URL: {oauth_url}")
+    
+    return oauth_url
 
 
 async def get_access_token(code: str) -> str:

@@ -1,0 +1,21 @@
+[Unit]
+Description=GitHub Action Executor
+After=network.target
+
+[Service]
+Type=simple
+User=kirrysin
+WorkingDirectory=/home/kirrysin/gax
+Environment="PATH=/home/kirrysin/gax/venv/bin"
+ExecStart=/home/kirrysin/gax/venv/bin/uvicorn app:app --host 0.0.0.0 --port 8000
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+# Переменные окружения (если нужно, раскомментируйте и укажите путь к .env)
+# EnvironmentFile=/home/kirrysin/gax/.env
+
+[Install]
+WantedBy=multi-user.target
+
