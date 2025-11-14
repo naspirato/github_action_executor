@@ -5,9 +5,14 @@
 ## Возможности
 
 - ✅ Авторизация через GitHub OAuth
-- ✅ Проверка прав коллаборатора перед запуском workflow
-- ✅ Веб-форма для выбора тестов
-- ✅ Запуск workflow через GitHub App (без использования PAT)
+- ✅ Проверка прав коллаборатора перед запуском workflow (настраивается)
+- ✅ Динамическая загрузка workflows и веток из репозитория
+- ✅ Автоматическое определение workflow inputs из YAML
+- ✅ Фильтрация веток по regex-паттернам
+- ✅ Запуск workflow от имени пользователя или GitHub App (настраивается)
+- ✅ Веб-форма с динамическими полями для всех workflow inputs
+- ✅ REST API для программного доступа
+- ✅ Кэширование веток и workflows для улучшения производительности
 - ✅ Готово для развертывания в Yandex Cloud
 
 ## Требования
@@ -30,10 +35,28 @@
    ```
 
 3. **Настройте переменные окружения:**
-   ```bash
-   cp .env.example .env
-   # Отредактируйте .env файл
-   ```
+
+   Создайте файл `.env` со следующими переменными:
+
+   **Обязательные:**
+   - `SECRET_KEY` - случайный секретный ключ для сессий (например, сгенерируйте через `openssl rand -hex 32`)
+   - `GITHUB_CLIENT_ID` - Client ID из OAuth App
+   - `GITHUB_CLIENT_SECRET` - Client Secret из OAuth App
+   - `GITHUB_APP_ID` - App ID из GitHub App
+   - `GITHUB_APP_INSTALLATION_ID` - Installation ID
+   - `GITHUB_APP_PRIVATE_KEY_PATH` - путь к файлу с приватным ключом (например, `github-app-private-key.pem`)
+
+   **Опциональные:**
+   - `GITHUB_CALLBACK_URL` - URL для OAuth callback (по умолчанию: `http://localhost:8000/auth/github/callback`)
+   - `DEFAULT_REPO_OWNER` - владелец репозитория по умолчанию
+   - `DEFAULT_REPO_NAME` - название репозитория по умолчанию
+   - `DEFAULT_WORKFLOW_ID` - ID workflow по умолчанию
+   - `HOST` - хост для запуска (по умолчанию: `0.0.0.0`)
+   - `PORT` - порт для запуска (по умолчанию: `8000`)
+   - `AUTO_OPEN_RUN` - автоматически открывать ссылку на запуск workflow (по умолчанию: `true`)
+   - `BRANCH_FILTER_PATTERNS` - regex-паттерны для фильтрации веток через запятую (например: `^main$,^stable-.*,^stream-.*`)
+   - `CHECK_PERMISSIONS` - проверять права коллаборатора перед запуском (по умолчанию: `true`)
+   - `USE_USER_TOKEN_FOR_WORKFLOWS` - запускать workflow от имени пользователя вместо GitHub App (по умолчанию: `true`)
 
 ## Настройка GitHub
 
@@ -66,7 +89,9 @@
 
 ### 3. Настройка Workflow
 
-Ваш workflow должен поддерживать `workflow_dispatch` с inputs:
+Ваш workflow должен поддерживать `workflow_dispatch` с inputs. Приложение автоматически определяет все inputs из YAML и создает соответствующие поля в форме.
+
+**Пример простого workflow:**
 
 ```yaml
 name: CI Tests
@@ -78,6 +103,7 @@ on:
         description: 'Tests to run'
         required: false
         type: string
+        default: 'unit'
 
 jobs:
   test:
@@ -89,6 +115,67 @@ jobs:
           echo "Running tests: ${{ inputs.tests }}"
           # Ваши команды для запуска тестов
 ```
+
+**Пример workflow с разными типами inputs:**
+
+```yaml
+name: Advanced Workflow
+
+on:
+  workflow_dispatch:
+    inputs:
+      test_targets:
+        description: 'Test targets to run'
+        required: true
+        type: string
+      test_type:
+        description: 'Type of tests'
+        required: false
+        type: choice
+        options:
+          - pytest
+          - unittest
+          - integration
+        default: 'pytest'
+      test_size:
+        description: 'Test size'
+        required: false
+        type: choice
+        options:
+          - small
+          - medium
+          - large
+      build_preset:
+        description: 'Build preset'
+        required: false
+        type: string
+        default: 'release'
+      enable_debug:
+        description: 'Enable debug mode'
+        required: false
+        type: boolean
+        default: false
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Run tests
+        run: |
+          echo "Test targets: ${{ inputs.test_targets }}"
+          echo "Test type: ${{ inputs.test_type }}"
+          echo "Test size: ${{ inputs.test_size }}"
+          echo "Build preset: ${{ inputs.build_preset }}"
+          echo "Debug: ${{ inputs.enable_debug }}"
+```
+
+Приложение автоматически создаст форму с:
+- Текстовым полем для `test_targets` (required)
+- Выпадающим списком для `test_type` с опциями pytest/unittest/integration
+- Выпадающим списком для `test_size` с опциями small/medium/large
+- Текстовым полем для `build_preset` с дефолтным значением
+- Чекбоксом для `enable_debug`
 
 ## Запуск локально
 
@@ -294,23 +381,46 @@ docker-compose up -d
 
 1. Откройте веб-интерфейс
 2. Авторизуйтесь через GitHub (один раз)
-3. Укажите репозиторий и workflow
-4. Выберите тесты для запуска
-5. Нажмите "Запустить Workflow"
-6. Откроется страница с результатом запуска
+3. Укажите репозиторий (формат: `owner/repo` или выберите из списка)
+4. После выбора репозитория автоматически загружаются:
+   - Список доступных workflows (можно выбрать из выпадающего списка)
+   - Список веток (фильтруются по `BRANCH_FILTER_PATTERNS`)
+5. Выберите workflow - форма автоматически обновится с полями для всех workflow inputs:
+   - Текстовые поля для `type: string`
+   - Выпадающие списки для `type: choice` с опциями из workflow
+   - Чекбоксы для `type: boolean`
+   - Поля помечаются как обязательные если `required: true`
+   - Заполняются дефолтные значения если указаны в workflow
+6. Заполните необходимые поля и выберите ветку
+7. Нажмите "Запустить Workflow"
+8. Откроется страница с результатом запуска и ссылкой на GitHub Actions run
 
 ### Прямая ссылка (без UI)
 
-Вы можете создать прямую ссылку для запуска workflow:
+Вы можете создать прямую ссылку для запуска workflow. Все параметры кроме `owner`, `repo`, `workflow_id`, `ref` и `ui` передаются как workflow inputs:
 
 ```
 http://your-server/workflow/trigger?owner=owner_name&repo=my-repo&workflow_id=ci.yml&ref=main&tests=unit,integration
+```
+
+**Пример с несколькими inputs:**
+
+```
+http://your-server/workflow/trigger?owner=naspirato&repo=ydb&workflow_id=run_tests.yml&ref=main&test_targets=ydb/tests/&test_type=pytest&test_size=large&build_preset=relwithdebinfo
 ```
 
 При клике по ссылке:
 1. Если не авторизован → редирект на GitHub OAuth
 2. После авторизации → сразу запускается workflow
 3. Показывается страница с результатом
+
+**Параметры:**
+- `owner` - владелец репозитория (обязательно)
+- `repo` - название репозитория (обязательно)
+- `workflow_id` - ID workflow файла (обязательно)
+- `ref` - ветка или тег (по умолчанию: `main`)
+- `ui=true` - открыть форму вместо немедленного запуска
+- Любые другие параметры передаются как workflow inputs
 
 ### Быстрый запуск тестов (Badges)
 
@@ -343,24 +453,64 @@ curl "http://your-server/workflow/trigger?owner=owner_name&repo=my-repo&workflow
 ## API Endpoints
 
 ### Web Interface
-- `GET /` - Главная страница
-- `GET /workflow/form` - Форма выбора тестов
+- `GET /` - Главная страница с формой запуска workflow
 - `GET /workflow/trigger` - Универсальный endpoint для запуска workflow (через URL)
+  - Параметры: `owner`, `repo`, `workflow_id`, `ref`, и любые workflow inputs
+  - Поддерживает `Accept: application/json` для JSON ответа
+  - Параметр `ui=true` открывает форму вместо немедленного запуска
 - `POST /workflow/trigger` - Запуск workflow из формы
 
 ### Authentication
 - `GET /auth/github` - Начать OAuth авторизацию
+  - Параметр `redirect_after` - URL для редиректа после авторизации
 - `GET /auth/github/callback` - OAuth callback
 - `GET /auth/logout` - Выход
 - `GET /auth/user` - Информация о текущем пользователе
 
-### API
+### REST API
+Все API endpoints требуют аутентификации через сессию (OAuth).
+
 - `POST /api/trigger` - Программный запуск workflow (JSON)
+  ```json
+  {
+    "owner": "username",
+    "repo": "repo-name",
+    "workflow_id": "ci.yml",
+    "ref": "main",
+    "inputs": {"test_targets": "tests/", "test_type": "pytest"},
+    "tests": ["unit", "integration"]  // опционально, для обратной совместимости
+  }
+  ```
+
+- `GET /api/branches` - Получить список веток репозитория
+  - Параметры: `owner`, `repo`
+  - Использует фильтрацию по `BRANCH_FILTER_PATTERNS` из конфига
+  - Возвращает: `{"branches": ["main", "stable-1.0", ...]}`
+
+- `GET /api/workflows` - Получить список workflows репозитория
+  - Параметры: `owner`, `repo`
+  - Возвращает: `{"workflows": [{"id": "ci.yml", "name": "CI", "path": ".github/workflows/ci.yml", "state": "active"}, ...]}`
+
+- `GET /api/workflow-info` - Получить информацию о workflow включая inputs
+  - Параметры: `owner`, `repo`, `workflow_id`
+  - Возвращает: `{"found": true, "inputs": {...}, "has_workflow_dispatch": true}`
+  - Inputs включают: `type`, `description`, `required`, `default`, `options` (для choice)
+
+- `GET /api/find-run` - Найти workflow run по времени запуска
+  - Параметры: `owner`, `repo`, `workflow_id`, `trigger_time` (ISO format), `ref` (опционально)
+  - Возвращает: `{"found": true, "run_id": 123456, "run_url": "...", "status": "completed", "conclusion": "success"}`
+
+- `GET /api/check-permissions` - Проверить права доступа к репозиторию
+  - Параметры: `owner`, `repo`
+  - Возвращает: `{"has_access": true, "can_trigger": true, "username": "...", "check_enabled": true}`
 
 ### Health Check
 - `GET /health` - Проверка работоспособности
+  - Возвращает: `{"status": "ok"}`
 
 ## Пример использования API
+
+### Программный запуск workflow
 
 ```bash
 # Сначала авторизуйтесь через веб-интерфейс, затем используйте сессию
@@ -373,17 +523,99 @@ curl -X POST http://localhost:8000/api/trigger \
     "repo": "repo-name",
     "workflow_id": "ci.yml",
     "ref": "main",
-    "tests": ["unit", "integration"]
+    "inputs": {
+      "test_targets": "tests/",
+      "test_type": "pytest",
+      "test_size": "large"
+    }
   }'
 ```
+
+### Получение списка веток
+
+```bash
+curl "http://localhost:8000/api/branches?owner=username&repo=repo-name" \
+  -H "Cookie: session=<your-session-cookie>"
+```
+
+### Получение списка workflows
+
+```bash
+curl "http://localhost:8000/api/workflows?owner=username&repo=repo-name" \
+  -H "Cookie: session=<your-session-cookie>"
+```
+
+### Получение информации о workflow
+
+```bash
+curl "http://localhost:8000/api/workflow-info?owner=username&repo=repo-name&workflow_id=ci.yml" \
+  -H "Cookie: session=<your-session-cookie>"
+```
+
+### Проверка прав доступа
+
+```bash
+curl "http://localhost:8000/api/check-permissions?owner=username&repo=repo-name" \
+  -H "Cookie: session=<your-session-cookie>"
+```
+
+## Конфигурация
+
+### Переменные окружения
+
+Все настройки можно задать через переменные окружения:
+
+| Переменная | Описание | По умолчанию | Обязательно |
+|------------|----------|--------------|-------------|
+| `SECRET_KEY` | Секретный ключ для сессий | - | ✅ |
+| `GITHUB_CLIENT_ID` | OAuth Client ID | - | ✅ |
+| `GITHUB_CLIENT_SECRET` | OAuth Client Secret | - | ✅ |
+| `GITHUB_APP_ID` | GitHub App ID | - | ✅ |
+| `GITHUB_APP_INSTALLATION_ID` | Installation ID | - | ✅ |
+| `GITHUB_APP_PRIVATE_KEY_PATH` | Путь к приватному ключу | - | ✅ |
+| `GITHUB_CALLBACK_URL` | OAuth callback URL | `http://localhost:8000/auth/github/callback` | ❌ |
+| `DEFAULT_REPO_OWNER` | Владелец репозитория по умолчанию | - | ❌ |
+| `DEFAULT_REPO_NAME` | Название репозитория по умолчанию | - | ❌ |
+| `DEFAULT_WORKFLOW_ID` | ID workflow по умолчанию | - | ❌ |
+| `HOST` | Хост для запуска | `0.0.0.0` | ❌ |
+| `PORT` | Порт для запуска | `8000` | ❌ |
+| `AUTO_OPEN_RUN` | Автоматически открывать ссылку на запуск | `true` | ❌ |
+| `BRANCH_FILTER_PATTERNS` | Regex-паттерны для фильтрации веток (через запятую) | `^main$,^stable-.*,^stream-.*` | ❌ |
+| `CHECK_PERMISSIONS` | Проверять права коллаборатора | `true` | ❌ |
+| `USE_USER_TOKEN_FOR_WORKFLOWS` | Запускать от имени пользователя | `true` | ❌ |
+
+### Настройка фильтрации веток
+
+По умолчанию показываются только ветки `main`, `stable-*` и `stream-*`. Чтобы изменить это поведение:
+
+```bash
+# Показать все ветки
+unset BRANCH_FILTER_PATTERNS
+
+# Или задать свои паттерны
+export BRANCH_FILTER_PATTERNS="^main$,^develop$,^release-.*"
+```
+
+### Запуск от имени пользователя vs GitHub App
+
+По умолчанию workflows запускаются от имени авторизованного пользователя (`USE_USER_TOKEN_FOR_WORKFLOWS=true`). Это означает:
+- В истории GitHub Actions workflow будет показан как запущенный пользователем
+- Workflow имеет права пользователя
+
+Если установить `USE_USER_TOKEN_FOR_WORKFLOWS=false`:
+- Workflows запускаются от имени GitHub App
+- В истории показывается как запущенный ботом
+- Workflow имеет права GitHub App
 
 ## Безопасность
 
 - ✅ Используется GitHub App вместо PAT
-- ✅ Проверка прав коллаборатора перед запуском
+- ✅ Проверка прав коллаборатора перед запуском (настраивается через `CHECK_PERMISSIONS`)
 - ✅ OAuth для аутентификации пользователей
 - ✅ Session-based аутентификация
+- ✅ CSRF защита через state параметр в OAuth
 - ⚠️ **Важно**: Храните приватный ключ GitHub App в безопасном месте (Yandex Lockbox, Secrets Manager)
+- ⚠️ **Важно**: Используйте сильный `SECRET_KEY` в production
 
 ## Решение проблем
 
@@ -408,24 +640,39 @@ curl -X POST http://localhost:8000/api/trigger \
 
 ```
 github_action_executor/
-├── app.py                 # Главный файл приложения
+├── app.py                      # Главный файл приложения (FastAPI)
+├── config.py                    # Конфигурация приложения
 ├── backend/
-│   ├── routes/           # API маршруты
-│   │   ├── auth.py       # OAuth авторизация
-│   │   ├── workflow.py   # Запуск workflow
-│   │   └── api.py        # REST API
-│   └── services/         # Бизнес-логика
-│       ├── github_app.py      # GitHub App токены
-│       ├── github_oauth.py    # OAuth
-│       ├── permissions.py    # Проверка прав
-│       └── workflow.py        # Запуск workflow
+│   ├── routes/                  # API маршруты
+│   │   ├── auth.py              # OAuth авторизация
+│   │   ├── workflow.py          # Запуск workflow (GET/POST)
+│   │   └── api.py               # REST API endpoints
+│   └── services/                # Бизнес-логика
+│       ├── github_app.py        # GitHub App токены и JWT
+│       ├── github_oauth.py      # OAuth авторизация
+│       ├── permissions.py       # Проверка прав доступа
+│       ├── workflow.py          # Запуск workflow и поиск runs
+│       ├── workflow_info.py     # Получение информации о workflow (inputs)
+│       ├── workflows.py         # Получение списка workflows
+│       ├── branches.py          # Получение списка веток с фильтрацией
+│       └── cache.py             # Кэширование (in-memory)
 ├── frontend/
-│   ├── templates/        # HTML шаблоны
-│   └── static/           # CSS, JS
-├── requirements.txt      # Python зависимости
-├── Dockerfile           # Docker образ
-├── docker-compose.yml   # Docker Compose
-└── README.md           # Документация
+│   ├── templates/               # HTML шаблоны (Jinja2)
+│   │   ├── index.html           # Главная страница с формой
+│   │   └── result.html          # Страница результата запуска
+│   └── static/                  # Статические файлы
+│       ├── style.css            # Стили
+│       └── fav.jpeg             # Иконка
+├── requirements.txt             # Python зависимости
+├── Dockerfile                   # Docker образ
+├── docker-compose.yml           # Docker Compose конфигурация
+├── serverless.yaml              # Yandex Cloud Functions конфигурация
+├── github-action-executor.service  # systemd service файл
+├── start.sh                     # Скрипт запуска в фоне
+├── stop.sh                      # Скрипт остановки
+├── QUICKSTART.md                # Быстрый старт
+├── yandex-cloud-deploy.md       # Инструкции по развертыванию в Yandex Cloud
+└── README.md                    # Документация
 ```
 
 ## Лицензия
