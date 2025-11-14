@@ -1,61 +1,99 @@
 <!DOCTYPE html>
-<html lang="ru">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>GitHub Action Executor</title>
+    <title>Run GitHub Action</title>
+    <link rel="icon" type="image/jpeg" href="/static/fav.jpeg">
     <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
     <div class="container">
-        <header>
-            <h1>🚀 GitHub Action Executor</h1>
-            <p class="subtitle">Запуск GitHub Actions workflows с проверкой прав</p>
-        </header>
-
-        <div class="auth-section">
-            {% if user %}
-                <div class="user-info">
-                    <img src="{{ user.avatar_url }}" alt="{{ user.login }}" class="avatar">
-                    <span>Привет, <strong>{{ user.login }}</strong>!</span>
-                    <a href="/auth/logout" class="btn btn-secondary">Выйти</a>
-                </div>
-            {% else %}
-                <div class="login-prompt">
-                    <p>Для запуска workflow необходимо авторизоваться через GitHub</p>
-                    <a href="/auth/github" class="btn btn-primary">Войти через GitHub</a>
-                </div>
-            {% endif %}
+        {% if not user %}
+        <div class="auth-overlay">
+            <div class="auth-modal">
+                <h2>Authentication Required</h2>
+                <p>Please sign in with GitHub to run workflows</p>
+                <a href="/auth/github" class="btn btn-primary">Sign in with GitHub</a>
+            </div>
         </div>
+        {% endif %}
+
+        <header>
+            <h1>Run GitHub Action</h1>
+            <div class="logo-container">
+                <svg class="github-logo" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M12 2C6.477 2 2 6.477 2 12c0 4.42 2.865 8.17 6.839 9.49.5.092.682-.217.682-.482 0-.237-.008-.866-.013-1.7-2.782.603-3.369-1.34-3.369-1.34-.454-1.156-1.11-1.463-1.11-1.463-.908-.62.069-.608.069-.608 1.003.07 1.531 1.03 1.531 1.03.892 1.529 2.341 1.087 2.91.831.092-.646.35-1.086.636-1.336-2.22-.253-4.555-1.11-4.555-4.943 0-1.091.39-1.984 1.029-2.683-.103-.253-.446-1.27.098-2.647 0 0 .84-.269 2.75 1.025A9.578 9.578 0 0112 6.836c.85.004 1.705.114 2.504.336 1.909-1.294 2.747-1.025 2.747-1.025.546 1.377.203 2.394.1 2.647.64.699 1.028 1.592 1.028 2.683 0 3.842-2.339 4.687-4.566 4.935.359.309.678.919.678 1.852 0 1.336-.012 2.415-.012 2.743 0 .267.18.578.688.48C19.138 20.167 22 16.418 22 12c0-5.523-4.477-10-10-10z"/>
+                </svg>
+                <div class="arrow-line"></div>
+                <div class="action-circle">8</div>
+            </div>
+            <p class="subtitle">Start a GitHub Actions workflow.</p>
+        </header>
 
         {% if user %}
         <main>
-            <div class="form-container">
-                <form id="workflowForm" action="/workflow/trigger" method="post" class="workflow-form">
-                    <div class="form-group">
-                        <label for="owner">Владелец репозитория:</label>
-                        <input type="text" id="owner" name="owner" 
-                               value="{{ default_owner or '' }}" 
-                               placeholder="username или organization" required>
+            <form id="workflowForm" action="/workflow/trigger" method="post" class="workflow-form">
+                <div class="form-group">
+                    <div class="field-header">
+                        <label for="repository">Repository</label>
                     </div>
-                    
-                    <div class="form-group">
-                        <label for="repo">Название репозитория:</label>
-                        <input type="text" id="repo" name="repo" 
-                               value="{{ default_repo or '' }}" 
-                               placeholder="repo-name" required>
+                    <div class="searchable-select-wrapper">
+                        <input type="text" 
+                               id="repository" 
+                               class="searchable-select-input" 
+                               placeholder="owner/repo"
+                               value="{% if default_owner and default_repo %}{{ default_owner }}/{{ default_repo }}{% endif %}">
+                        <select id="repository_select" class="searchable-select" style="display: none;">
+                            <option value=""></option>
+                        </select>
+                        <div class="searchable-select-dropdown" id="repository_dropdown"></div>
                     </div>
-                    
-                    <div class="form-group">
-                        <label for="workflow_id">Workflow:</label>
+                    <input type="hidden" id="owner" name="owner" value="{{ default_owner or '' }}">
+                    <input type="hidden" id="repo" name="repo" value="{{ default_repo or '' }}">
+                </div>
+                
+                <div class="form-group">
+                    <div class="field-header">
+                        <label for="branch">Branch</label>
+                    </div>
+                    <div class="field-with-loader">
+                        <div class="searchable-select-wrapper">
+                            <input type="text" 
+                                   id="branch_search" 
+                                   class="searchable-select-input" 
+                                   placeholder="main"
+                                   value="{% if branches and branches|length > 0 %}main{% else %}main{% endif %}">
+                            <select id="ref" name="ref" class="searchable-select">
+                                {% if branches and branches|length > 0 %}
+                                    {% for branch in branches %}
+                                        <option value="{{ branch }}" {% if branch == 'main' %}selected{% endif %}>{{ branch }}</option>
+                                    {% endfor %}
+                                {% else %}
+                                    <option value="main" selected>main</option>
+                                {% endif %}
+                            </select>
+                            <div class="searchable-select-dropdown" id="branch_dropdown"></div>
+                        </div>
+                        <div id="branch-loader" class="field-loader" style="display: none;">
+                            <div class="spinner-small"></div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <div class="field-header">
+                        <label for="workflow_id">Workflow</label>
+                        <span class="optional">Optional</span>
+                    </div>
+                    <div class="field-with-loader">
                         <div class="searchable-select-wrapper">
                             <input type="text" 
                                    id="workflow_search" 
                                    class="searchable-select-input" 
-                                   placeholder="{% if workflows and workflows|length > 0 %}Поиск workflow... ({{ workflows|length }} доступно){% else %}Введите workflow ID{% endif %}" 
-                                   autocomplete="off"
+                                   placeholder="build - Build project"
                                    value="{% if default_workflow_id %}{{ default_workflow_id }}{% endif %}">
-                            <select id="workflow_id" name="workflow_id" class="searchable-select" required>
+                            <select id="workflow_id" name="workflow_id" class="searchable-select">
                                 {% if workflows and workflows|length > 0 %}
                                     {% for workflow in workflows %}
                                         <option value="{{ workflow.id }}" 
@@ -65,50 +103,24 @@
                                         </option>
                                     {% endfor %}
                                 {% else %}
-                                    <option value="{{ default_workflow_id or '' }}" selected>{{ default_workflow_id or 'Выберите workflow' }}</option>
+                                    <option value="{{ default_workflow_id or '' }}" selected>{{ default_workflow_id or '' }}</option>
                                 {% endif %}
                             </select>
                             <div class="searchable-select-dropdown" id="workflow_dropdown"></div>
                         </div>
-                        {% if not workflows or workflows|length == 0 %}
-                            <small style="color: #666; font-size: 0.7em;">Введите owner и repo, чтобы загрузить список workflows</small>
-                        {% endif %}
-                    </div>
-                    
-                    <div class="form-group">
-                        <label for="ref">Ветка:</label>
-                        <div class="searchable-select-wrapper">
-                            <input type="text" 
-                                   id="branch_search" 
-                                   class="searchable-select-input" 
-                                   placeholder="{% if branches and branches|length > 0 %}Поиск ветки... ({{ branches|length }} доступно){% else %}Введите название ветки{% endif %}" 
-                                   autocomplete="off"
-                                   value="{% if branches and branches|length > 0 %}main{% else %}main{% endif %}">
-                            <select id="ref" name="ref" class="searchable-select">
-                                {% if branches and branches|length > 0 %}
-                                    {% for branch in branches %}
-                                        <option value="{{ branch }}" 
-                                                {% if branch == 'main' %}selected{% endif %}>
-                                            {{ branch }}
-                                        </option>
-                                    {% endfor %}
-                                {% else %}
-                                    <option value="main" selected>main</option>
-                                {% endif %}
-                            </select>
-                            <div class="searchable-select-dropdown" id="branch_dropdown"></div>
+                        <div id="workflow-loader" class="field-loader" style="display: none;">
+                            <div class="spinner-small"></div>
                         </div>
-                        {% if not branches or branches|length == 0 %}
-                            <small style="color: #666; font-size: 0.7em;">Введите owner и repo, чтобы загрузить список веток</small>
-                        {% endif %}
                     </div>
+                </div>
 
-                    {# Динамические поля для workflow inputs #}
+                {# Динамические поля для workflow inputs #}
+                <div id="workflow-inputs-wrapper" style="display: none;">
                     <div id="workflow-inputs"></div>
-                    
-                    <button type="submit" class="btn btn-primary">Запустить Workflow</button>
-                </form>
-            </div>
+                </div>
+                
+                <button type="submit" class="btn btn-primary">Run workflow</button>
+            </form>
         </main>
         {% endif %}
     </div>
@@ -191,14 +203,17 @@
             const repo = document.getElementById('repo').value.trim();
             const workflowId = document.getElementById('workflow_id').value.trim();
             const inputsContainer = document.getElementById('workflow-inputs');
+            const inputsWrapper = document.getElementById('workflow-inputs-wrapper');
             
-            if (!owner || !repo || !workflowId || !inputsContainer) {
+            if (!owner || !repo || !workflowId || !inputsContainer || !inputsWrapper) {
                 inputsContainer.innerHTML = '';
+                inputsWrapper.style.display = 'none';
                 return;
             }
             
             try {
-                inputsContainer.innerHTML = '<div style="padding: 5px; color: #666; font-size: 0.7em;">Загрузка параметров workflow...</div>';
+                inputsWrapper.style.display = 'block';
+                inputsContainer.innerHTML = '<div class="loading-state"><div class="spinner"></div><span>Loading workflow parameters...</span></div>';
                 
                 const response = await fetch(`/api/workflow-info?owner=${encodeURIComponent(owner)}&repo=${encodeURIComponent(repo)}&workflow_id=${encodeURIComponent(workflowId)}`);
                 
@@ -208,6 +223,7 @@
                     
                     if (Object.keys(inputs).length === 0) {
                         inputsContainer.innerHTML = '';
+                        inputsWrapper.style.display = 'none';
                         return;
                     }
                     
@@ -218,51 +234,77 @@
                         const defaultValue = inputConfig.default;
                         
                         html += '<div class="form-group">';
-                        html += `<label for="input_${inputName}">${fieldLabel}${isRequired ? ' <span class="required">*</span>' : ''}</label>`;
+                        html += `<div class="field-header">`;
+                        html += `<label for="input_${inputName}">${fieldLabel}</label>`;
+                        if (!isRequired) {
+                            html += `<span class="optional">Optional</span>`;
+                        }
+                        html += `</div>`;
                         
                         if (inputConfig.type === 'choice') {
                             html += `<select id="input_${inputName}" name="${inputName}" class="form-select" ${isRequired ? 'required' : ''}>`;
                             if (!isRequired) {
-                                html += '<option value="">-- Не выбрано --</option>';
+                                html += '<option value=""></option>';
                             }
                             for (const option of inputConfig.options || []) {
                                 html += `<option value="${option}" ${option === defaultValue ? 'selected' : ''}>${option}</option>`;
                             }
                             html += '</select>';
                         } else if (inputConfig.type === 'boolean') {
+                            html += `<div class="checkbox-wrapper">`;
                             html += `<label class="checkbox-label">`;
                             html += `<input type="checkbox" id="input_${inputName}" name="${inputName}" value="true" ${defaultValue ? 'checked' : ''}>`;
                             html += `<span>${fieldLabel}</span>`;
                             html += `</label>`;
+                            html += `</div>`;
                         } else if (inputConfig.type === 'environment') {
                             html += `<select id="input_${inputName}" name="${inputName}" class="form-select" ${isRequired ? 'required' : ''}>`;
                             if (!isRequired) {
-                                html += '<option value="">-- Не выбрано --</option>';
+                                html += '<option value=""></option>';
                             }
                             for (const env of ['production', 'staging', 'development', 'test']) {
                                 html += `<option value="${env}" ${env === defaultValue ? 'selected' : ''}>${env}</option>`;
                             }
                             html += '</select>';
                         } else {
-                            html += `<input type="text" id="input_${inputName}" name="${inputName}" value="${defaultValue || ''}" placeholder="${fieldLabel}" class="form-input" ${isRequired ? 'required' : ''}>`;
+                            html += `<input type="text" id="input_${inputName}" name="${inputName}" value="${defaultValue || ''}" placeholder="${inputConfig.description || fieldLabel}" class="form-input" ${isRequired ? 'required' : ''}>`;
                         }
                         
                         html += '</div>';
                     }
                     
                     inputsContainer.innerHTML = html;
+                    inputsWrapper.style.display = 'block';
                 } else {
-                    inputsContainer.innerHTML = '';
+                    // Ошибка от сервера
+                    const errorText = await response.text();
+                    let errorMessage = 'Failed to load workflow parameters';
+                    try {
+                        const errorData = JSON.parse(errorText);
+                        errorMessage = errorData.detail || errorMessage;
+                    } catch (e) {
+                        errorMessage = errorText || errorMessage;
+                    }
+                    inputsContainer.innerHTML = `<div class="error-state">${errorMessage}</div>`;
+                    inputsWrapper.style.display = 'block';
                 }
             } catch (error) {
                 console.error('Failed to load workflow inputs:', error);
-                inputsContainer.innerHTML = '';
+                inputsContainer.innerHTML = `<div class="error-state">Failed to load workflow parameters: ${error.message}</div>`;
+                inputsWrapper.style.display = 'block';
             }
         }
         
         // Функция для загрузки branches и workflows
         async function loadBranchesAndWorkflows(owner, repo) {
             if (!owner || !repo) return;
+            
+            const branchLoader = document.getElementById('branch-loader');
+            const workflowLoader = document.getElementById('workflow-loader');
+            
+            // Показываем спиннеры
+            if (branchLoader) branchLoader.style.display = 'flex';
+            if (workflowLoader) workflowLoader.style.display = 'flex';
             
             try {
                 const [branchesResponse, workflowsResponse] = await Promise.all([
@@ -285,6 +327,10 @@
                 }
             } catch (error) {
                 console.error('Failed to load branches/workflows:', error);
+            } finally {
+                // Скрываем спиннеры
+                if (branchLoader) branchLoader.style.display = 'none';
+                if (workflowLoader) workflowLoader.style.display = 'none';
             }
         }
         
@@ -326,39 +372,52 @@
             }
         }
         
+        // Обработка поля Repository (owner/repo)
+        function setupRepositoryField() {
+            const repositoryInput = document.getElementById('repository');
+            const ownerInput = document.getElementById('owner');
+            const repoInput = document.getElementById('repo');
+            
+            if (!repositoryInput || !ownerInput || !repoInput) return;
+            
+            let loadTimeout;
+            
+            function updateOwnerRepo() {
+                const value = repositoryInput.value.trim();
+                const parts = value.split('/');
+                
+                if (parts.length >= 2) {
+                    const owner = parts[0].trim();
+                    const repo = parts.slice(1).join('/').trim(); // На случай если repo содержит /
+                    ownerInput.value = owner;
+                    repoInput.value = repo;
+                    
+                    clearTimeout(loadTimeout);
+                    loadTimeout = setTimeout(function() {
+                        if (owner && repo) {
+                            loadBranchesAndWorkflows(owner, repo);
+                        }
+                    }, 500);
+                }
+            }
+            
+            repositoryInput.addEventListener('input', updateOwnerRepo);
+            repositoryInput.addEventListener('blur', updateOwnerRepo);
+            
+            // Инициализация при загрузке
+            if (ownerInput.value && repoInput.value) {
+                repositoryInput.value = `${ownerInput.value}/${repoInput.value}`;
+                if (ownerInput.value && repoInput.value) {
+                    loadBranchesAndWorkflows(ownerInput.value, repoInput.value);
+                }
+            }
+        }
+        
         // Инициализация при загрузке
         function initAll() {
             initSearchableSelect('workflow_search', 'workflow_id', 'workflow_dropdown');
             initSearchableSelect('branch_search', 'ref', 'branch_dropdown');
-            
-            const ownerInput = document.getElementById('owner');
-            const repoInput = document.getElementById('repo');
-            let loadTimeout;
-            
-            function handleOwnerRepoChange() {
-                clearTimeout(loadTimeout);
-                loadTimeout = setTimeout(function() {
-                    const owner = ownerInput.value.trim();
-                    const repo = repoInput.value.trim();
-                    if (owner && repo) {
-                        loadBranchesAndWorkflows(owner, repo);
-                    }
-                }, 500);
-            }
-            
-            if (ownerInput) {
-                ownerInput.addEventListener('input', handleOwnerRepoChange);
-                ownerInput.addEventListener('blur', handleOwnerRepoChange);
-            }
-            
-            if (repoInput) {
-                repoInput.addEventListener('input', handleOwnerRepoChange);
-                repoInput.addEventListener('blur', handleOwnerRepoChange);
-            }
-            
-            if (ownerInput && repoInput && ownerInput.value && repoInput.value) {
-                loadBranchesAndWorkflows(ownerInput.value, repoInput.value);
-            }
+            setupRepositoryField();
         }
         
         if (document.readyState === 'loading') {
