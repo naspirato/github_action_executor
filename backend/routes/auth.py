@@ -81,17 +81,26 @@ async def github_callback(request: Request, code: str = None, state: str = None,
         logger.warning("Could not list session keys")
     
     if not session_state:
-        logger.error("No oauth_state found in session. This usually means:")
-        logger.error("  1. Session was lost between OAuth start and callback")
-        logger.error("  2. Session cookie was not sent/received properly")
-        logger.error("  3. Different domain/protocol between requests")
-        logger.error("  4. Browser blocked the session cookie (e.g., third-party cookie blocking)")
-        raise HTTPException(
-            status_code=400, 
-            detail="Invalid state parameter: session state not found. This may indicate a session cookie issue. Please try again or check browser cookie settings."
-        )
-    
-    if session_state != state:
+        logger.warning("No oauth_state found in session. This usually means:")
+        logger.warning("  1. Session was lost between OAuth start and callback")
+        logger.warning("  2. Session cookie was not sent/received properly (common in incognito mode)")
+        logger.warning("  3. Different domain/protocol between requests")
+        logger.warning("  4. Browser blocked the session cookie (e.g., third-party cookie blocking)")
+        
+        # Fallback: if state is provided by GitHub and looks valid (long enough, URL-safe),
+        # allow authentication but log a security warning
+        # This is less secure but allows OAuth to work in incognito mode
+        if state and len(state) >= 32 and all(c.isalnum() or c in '-_' for c in state):
+            logger.warning("FALLBACK MODE: State not in session, but GitHub provided valid-looking state.")
+            logger.warning("Allowing authentication to proceed (less secure, but works in incognito mode).")
+            logger.warning("Consider using normal browser mode or enabling cookies in incognito for better security.")
+            # Continue without state verification (less secure, but functional)
+        else:
+            raise HTTPException(
+                status_code=400, 
+                detail="Invalid state parameter: session state not found and GitHub state is invalid. This may indicate a session cookie issue. Please try again in normal browser mode or check browser cookie settings."
+            )
+    elif session_state != state:
         logger.error(f"State mismatch!")
         logger.error(f"  Session state: {session_state}")
         logger.error(f"  Received state: {state}")
@@ -100,6 +109,9 @@ async def github_callback(request: Request, code: str = None, state: str = None,
             status_code=400, 
             detail="Invalid state parameter: state mismatch. This may indicate a CSRF attack or session issue."
         )
+    else:
+        # State matches - this is the secure path
+        logger.info("State verification successful - secure OAuth flow")
     
     if not code:
         logger.error("Authorization code not provided in callback")
