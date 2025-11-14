@@ -119,7 +119,7 @@
                     <button type="button" id="run-link-btn" class="btn btn-secondary" style="flex: 0 0 auto; opacity: 0.6; font-size: 13px; padding: 8px 16px; border-color: #d1d5db; background: #f9fafb; color: #6b7280;">Run link</button>
                     <button type="button" id="form-link-btn" class="btn btn-secondary" style="flex: 0 0 auto; opacity: 0.6; font-size: 13px; padding: 8px 16px; border-color: #d1d5db; background: #f9fafb; color: #6b7280;">Form link</button>
                 </div>
-                <div id="permission-message" style="margin-top: 10px; color: #6b7280; font-size: 0.9em;"></div>
+                <div id="permission-message"></div>
                 </form>
             
             <footer class="page-footer">
@@ -889,6 +889,9 @@
             // If owner or repo are empty, disable button and show message
             if (!owner || !repo) {
                 runButton.disabled = true;
+                runButton.style.opacity = '0.5';
+                runButton.style.cursor = 'not-allowed';
+                permissionMessage.style.display = 'block';
                 permissionMessage.textContent = 'Please enter repository owner and name';
                 return;
             }
@@ -899,6 +902,9 @@
                 if (response.status === 401) {
                     // Not authenticated
                     runButton.disabled = true;
+                    runButton.style.opacity = '0.5';
+                    runButton.style.cursor = 'not-allowed';
+                    permissionMessage.style.display = 'block';
                     permissionMessage.textContent = 'Please sign in with GitHub to run workflows';
                     return;
                 }
@@ -911,7 +917,10 @@
                 
                 if (data.can_trigger) {
                     runButton.disabled = false;
+                    runButton.style.opacity = '1';
+                    runButton.style.cursor = 'pointer';
                     permissionMessage.textContent = '';
+                    permissionMessage.style.display = 'none';
                     if (data.user_role === 'contributor') {
                         console.log(`User ${data.username} is a contributor to ${owner}/${repo}`);
                     } else if (data.user_role === 'collaborator') {
@@ -919,6 +928,9 @@
                     }
                 } else {
                     runButton.disabled = true;
+                    runButton.style.opacity = '0.5';
+                    runButton.style.cursor = 'not-allowed';
+                    permissionMessage.style.display = 'block';
                     // Show appropriate message based on configuration
                     if (data.allow_contributors_only) {
                         permissionMessage.textContent = `You are not a contributor of ${owner}/${repo}. Only contributors can trigger workflows.`;
@@ -931,7 +943,10 @@
                 console.error('Error checking permissions:', error);
                 // In case of error, allow attempt (check will be on server)
                 runButton.disabled = false;
+                runButton.style.opacity = '1';
+                runButton.style.cursor = 'pointer';
                 permissionMessage.textContent = '';
+                permissionMessage.style.display = 'none';
             }
         }
         
