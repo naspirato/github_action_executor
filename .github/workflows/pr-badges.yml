@@ -1,0 +1,135 @@
+name: Add PR Badges
+
+on:
+  pull_request:
+    types: [opened, synchronize]
+
+jobs:
+  add-badges:
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+      pull-requests: write
+    env:
+      APP_DOMAIN: ${{ vars.APP_DOMAIN != '' && vars.APP_DOMAIN || 'http://localhost:8000' }}
+      BACKPORT_TARGET_BRANCH: ${{ vars.BACKPORT_TARGET_BRANCH != '' && vars.BACKPORT_TARGET_BRANCH || 'release/v1.0' }}
+    steps:
+      - name: Check if badge comment already exists
+        id: check_comment
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const prNumber = context.payload.pull_request.number;
+            const comments = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: prNumber,
+            });
+            
+            const badgeComment = comments.data.find(comment => 
+              comment.user.type === 'Bot' && 
+              comment.body.includes('▶ Run Tests') &&
+              comment.body.includes('▶ Backport')
+            );
+            
+            core.setOutput('comment_id', badgeComment ? badgeComment.id : '');
+            core.setOutput('exists', badgeComment ? 'true' : 'false');
+
+      - name: Add or update badge comment
+        if: steps.check_comment.outputs.exists == 'false'
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const prNumber = context.payload.pull_request.number;
+            const prBranch = context.payload.pull_request.head.ref;
+            const baseBranch = context.payload.pull_request.base.ref;
+            
+            // Get app domain from environment variable
+            // Set APP_DOMAIN in: Settings → Secrets and variables → Actions → Variables
+            let appDomain = process.env.APP_DOMAIN && process.env.APP_DOMAIN.trim() !== '' 
+              ? process.env.APP_DOMAIN.trim() 
+              : 'http://localhost:8000';
+            // Remove trailing slash to avoid double slashes in URL
+            appDomain = appDomain.replace(/\/+$/, '');
+            // Get backport target branch from environment variable or use default
+            // Set BACKPORT_TARGET_BRANCH in: Settings → Secrets and variables → Actions → Variables
+            const backportTargetBranch = process.env.BACKPORT_TARGET_BRANCH && process.env.BACKPORT_TARGET_BRANCH.trim() !== ''
+              ? process.env.BACKPORT_TARGET_BRANCH
+              : 'release/v1.0';
+            const repoOwner = context.repo.owner;
+            const repoName = context.repo.repo;
+            
+            // Build URLs for workflows
+            // ref=baseBranch - workflow file is taken from target branch
+            // pr_branch=prBranch - workflow should test/backport from PR branch
+            const testUrl = `${appDomain}/workflow/trigger?owner=${repoOwner}&repo=${repoName}&workflow_id=test.yml&ref=${baseBranch}&pr_branch=${prBranch}&test_type=all&from_pr=${prNumber}`;
+            const backportUrl = `${appDomain}/workflow/trigger?owner=${repoOwner}&repo=${repoName}&workflow_id=backport.yml&ref=${baseBranch}&source_branch=${prBranch}&target_branch=${baseBranch}&from_pr=${prNumber}`;
+            
+            const comment = '## 🚀 Quick Actions\n\n' +
+              'Use these badges to quickly run workflows for this PR:\n\n' +
+              '[![▶ Run Tests](https://img.shields.io/badge/▶_Run_Tests-4caf50?style=flat-square)](' + testUrl + ')\n' +
+              '[![▶ Backport](https://img.shields.io/badge/▶_Backport-2196f3?style=flat-square)](' + backportUrl + ')\n\n' +
+              '### Direct Links:\n' +
+              '- [Run Tests](' + testUrl + ')\n' +
+              '- [Backport to ' + backportTargetBranch + '](' + backportUrl + ')\n\n' +
+              '---\n' +
+              '*These links will automatically comment on this PR with the workflow results.*';
+
+            await github.rest.issues.createComment({
+              issue_number: prNumber,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: comment
+            });
+
+      - name: Update existing badge comment
+        if: steps.check_comment.outputs.exists == 'true'
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const prNumber = context.payload.pull_request.number;
+            const prBranch = context.payload.pull_request.head.ref;
+            const baseBranch = context.payload.pull_request.base.ref;
+            const commentId = parseInt('${{ steps.check_comment.outputs.comment_id }}');
+            
+            // Get app domain from environment variable
+            // Set APP_DOMAIN in: Settings → Secrets and variables → Actions → Variables
+            let appDomain = process.env.APP_DOMAIN && process.env.APP_DOMAIN.trim() !== '' 
+              ? process.env.APP_DOMAIN.trim() 
+              : 'http://localhost:8000';
+            // Remove trailing slash to avoid double slashes in URL
+            appDomain = appDomain.replace(/\/+$/, '');
+            // Get backport target branch from environment variable or use default
+            // Set BACKPORT_TARGET_BRANCH in: Settings → Secrets and variables → Actions → Variables
+            const backportTargetBranch = process.env.BACKPORT_TARGET_BRANCH && process.env.BACKPORT_TARGET_BRANCH.trim() !== ''
+              ? process.env.BACKPORT_TARGET_BRANCH
+              : 'release/v1.0';
+            const repoOwner = context.repo.owner;
+            const repoName = context.repo.repo;
+            
+            // Build URLs for workflows
+            // ref=baseBranch - workflow file is taken from target branch
+            // pr_branch=prBranch - workflow should test/backport from PR branch
+            const testUrl = `${appDomain}/workflow/trigger?owner=${repoOwner}&repo=${repoName}&workflow_id=test.yml&ref=${baseBranch}&pr_branch=${prBranch}&test_type=all&from_pr=${prNumber}`;
+            const backportUrl = `${appDomain}/workflow/trigger?owner=${repoOwner}&repo=${repoName}&workflow_id=backport.yml&ref=${baseBranch}&source_branch=${prBranch}&target_branch=${baseBranch}&from_pr=${prNumber}`;
+            
+            const comment = '## 🚀 Quick Actions\n\n' +
+              'Use these badges to quickly run workflows for this PR:\n\n' +
+              '[![▶ Run Tests](https://img.shields.io/badge/▶_Run_Tests-4caf50?style=flat-square)](' + testUrl + ')\n' +
+              '[![▶ Backport](https://img.shields.io/badge/▶_Backport-2196f3?style=flat-square)](' + backportUrl + ')\n\n' +
+              '### Direct Links:\n' +
+              '- [Run Tests](' + testUrl + ')\n' +
+              '- [Backport to ' + backportTargetBranch + '](' + backportUrl + ')\n\n' +
+              '---\n' +
+              '*These links will automatically comment on this PR with the workflow results.*';
+
+            await github.rest.issues.updateComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              comment_id: commentId,
+              body: comment
+            });
+
