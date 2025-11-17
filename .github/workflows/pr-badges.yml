@@ -48,9 +48,11 @@ jobs:
             
             // Get app domain from environment variable
             // Set APP_DOMAIN in: Settings → Secrets and variables → Actions → Variables
-            const appDomain = process.env.APP_DOMAIN && process.env.APP_DOMAIN.trim() !== '' 
-              ? process.env.APP_DOMAIN 
+            let appDomain = process.env.APP_DOMAIN && process.env.APP_DOMAIN.trim() !== '' 
+              ? process.env.APP_DOMAIN.trim() 
               : 'http://localhost:8000';
+            // Remove trailing slash to avoid double slashes in URL
+            appDomain = appDomain.replace(/\/+$/, '');
             // Get backport target branch from environment variable or use default
             // Set BACKPORT_TARGET_BRANCH in: Settings → Secrets and variables → Actions → Variables
             const backportTargetBranch = process.env.BACKPORT_TARGET_BRANCH && process.env.BACKPORT_TARGET_BRANCH.trim() !== ''
@@ -93,9 +95,11 @@ jobs:
             
             // Get app domain from environment variable
             // Set APP_DOMAIN in: Settings → Secrets and variables → Actions → Variables
-            const appDomain = process.env.APP_DOMAIN && process.env.APP_DOMAIN.trim() !== '' 
-              ? process.env.APP_DOMAIN 
+            let appDomain = process.env.APP_DOMAIN && process.env.APP_DOMAIN.trim() !== '' 
+              ? process.env.APP_DOMAIN.trim() 
               : 'http://localhost:8000';
+            // Remove trailing slash to avoid double slashes in URL
+            appDomain = appDomain.replace(/\/+$/, '');
             // Get backport target branch from environment variable or use default
             // Set BACKPORT_TARGET_BRANCH in: Settings → Secrets and variables → Actions → Variables
             const backportTargetBranch = process.env.BACKPORT_TARGET_BRANCH && process.env.BACKPORT_TARGET_BRANCH.trim() !== ''
