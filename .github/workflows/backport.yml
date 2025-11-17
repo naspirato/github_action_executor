@@ -92,8 +92,20 @@ jobs:
             exit 1
           }
 
+      - name: Backport specific commit
+        if: inputs.commit_sha != ''
+        id: backport_specific
+        run: |
+          echo "Backporting commit ${{ inputs.commit_sha }}"
+          git cherry-pick "${{ inputs.commit_sha }}" || {
+            echo "Cherry-pick failed, this might be due to conflicts"
+            exit 1
+          }
+          echo "has_changes=true" >> $GITHUB_OUTPUT
+
       - name: Backport all commits from source branch
         if: inputs.commit_sha == ''
+        id: backport_all
         run: |
           echo "Backporting all commits from ${{ inputs.source_branch }} to ${{ inputs.target_branch }}"
           # Get commits that are in source but not in target
@@ -102,6 +114,7 @@ jobs:
           
           if [ "$COMMITS" -eq 0 ]; then
             echo "No commits to backport"
+            echo "has_changes=false" >> $GITHUB_OUTPUT
             exit 0
           fi
           
@@ -110,10 +123,71 @@ jobs:
             echo "Cherry-pick failed, this might be due to conflicts"
             exit 1
           }
+          echo "has_changes=true" >> $GITHUB_OUTPUT
 
-      - name: Push changes
-        run: |
-          git push origin "${{ inputs.target_branch }}"
+      - name: Create PR for backport
+        if: |
+          (inputs.commit_sha != '' && steps.backport_specific.outputs.has_changes == 'true') ||
+          (inputs.commit_sha == '' && steps.backport_all.outputs.has_changes == 'true')
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const sourceBranch = '${{ inputs.source_branch }}';
+            const targetBranch = '${{ inputs.target_branch }}';
+            const commitSha = '${{ inputs.commit_sha }}';
+            const prNumber = '${{ inputs.from_pr }}';
+            
+            // Create a branch name for the PR
+            const backportBranch = `backport/${targetBranch}-${Date.now()}`;
+            
+            // Push the backport branch
+            const { execSync } = require('child_process');
+            execSync(`git push origin HEAD:${backportBranch}`, { stdio: 'inherit' });
+            
+            // Create PR
+            const prTitle = `Backport to ${targetBranch}`;
+            let prBody = `This PR backports changes to \`${targetBranch}\` branch.\n\n`;
+            
+            if (commitSha) {
+              prBody += `- Commit: \`${commitSha.substring(0, 7)}\`\n`;
+            } else {
+              prBody += `- Source branch: \`${sourceBranch}\`\n`;
+            }
+            
+            prBody += `- Target branch: \`${targetBranch}\`\n\n`;
+            prBody += `*This PR was created automatically by the backport workflow.*`;
+            
+            const pr = await github.rest.pulls.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: prTitle,
+              body: prBody,
+              head: backportBranch,
+              base: targetBranch,
+            });
+            
+            core.setOutput('pr_number', pr.data.number);
+            core.setOutput('pr_url', pr.data.html_url);
+            
+            console.log(`Created PR #${pr.data.number}: ${pr.data.html_url}`);
+            
+            // Comment on original PR if from_pr is set
+            if (prNumber && prNumber !== '') {
+              const originalPrNumber = parseInt(prNumber);
+              const comment = `✅ **Backport PR created!**
+              
+              - PR: #${pr.data.number}
+              - Link: ${pr.data.html_url}
+              - Target: \`${targetBranch}\``;
+              
+              await github.rest.issues.createComment({
+                issue_number: originalPrNumber,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                body: comment
+              });
+            }
 
       - name: Comment on PR (success)
         if: success() && inputs.from_pr != ''

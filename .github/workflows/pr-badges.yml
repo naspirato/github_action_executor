@@ -11,7 +11,8 @@ jobs:
       issues: write
       pull-requests: write
     env:
-      APP_DOMAIN: ${{ vars.APP_DOMAIN }}
+      APP_DOMAIN: ${{ vars.APP_DOMAIN != '' && vars.APP_DOMAIN || 'http://localhost:8000' }}
+      BACKPORT_TARGET_BRANCH: ${{ vars.BACKPORT_TARGET_BRANCH != '' && vars.BACKPORT_TARGET_BRANCH || 'release/v1.0' }}
     steps:
       - name: Check if badge comment already exists
         id: check_comment
@@ -50,12 +51,17 @@ jobs:
             const appDomain = process.env.APP_DOMAIN && process.env.APP_DOMAIN.trim() !== '' 
               ? process.env.APP_DOMAIN 
               : 'http://localhost:8000';
+            // Get backport target branch from environment variable or use default
+            // Set BACKPORT_TARGET_BRANCH in: Settings → Secrets and variables → Actions → Variables
+            const backportTargetBranch = process.env.BACKPORT_TARGET_BRANCH && process.env.BACKPORT_TARGET_BRANCH.trim() !== ''
+              ? process.env.BACKPORT_TARGET_BRANCH
+              : 'release/v1.0';
             const repoOwner = context.repo.owner;
             const repoName = context.repo.repo;
             
             // Build URLs for workflows
             const testUrl = `${appDomain}/workflow/trigger?owner=${repoOwner}&repo=${repoName}&workflow_id=test.yml&ref=${prBranch}&test_type=all&from_pr=${prNumber}`;
-            const backportUrl = `${appDomain}/workflow/trigger?owner=${repoOwner}&repo=${repoName}&workflow_id=backport.yml&ref=${prBranch}&source_branch=${baseBranch}&target_branch=release/v1.0&from_pr=${prNumber}`;
+            const backportUrl = `${appDomain}/workflow/trigger?owner=${repoOwner}&repo=${repoName}&workflow_id=backport.yml&ref=${prBranch}&source_branch=${baseBranch}&target_branch=${backportTargetBranch}&from_pr=${prNumber}`;
             
             const comment = '## 🚀 Quick Actions\n\n' +
               'Use these badges to quickly run workflows for this PR:\n\n' +
@@ -63,7 +69,7 @@ jobs:
               '[![▶ Backport](https://img.shields.io/badge/▶_Backport-2196f3?style=flat-square)](' + backportUrl + ')\n\n' +
               '### Direct Links:\n' +
               '- [Run Tests](' + testUrl + ')\n' +
-              '- [Backport to release/v1.0](' + backportUrl + ')\n\n' +
+              '- [Backport to ' + backportTargetBranch + '](' + backportUrl + ')\n\n' +
               '---\n' +
               '*These links will automatically comment on this PR with the workflow results.*';
 
@@ -85,14 +91,22 @@ jobs:
             const baseBranch = context.payload.pull_request.base.ref;
             const commentId = parseInt('${{ steps.check_comment.outputs.comment_id }}');
             
-            // Get app domain from environment variable or use default
-            const appDomain = process.env.APP_DOMAIN || 'http://localhost:8000';
+            // Get app domain from environment variable
+            // Set APP_DOMAIN in: Settings → Secrets and variables → Actions → Variables
+            const appDomain = process.env.APP_DOMAIN && process.env.APP_DOMAIN.trim() !== '' 
+              ? process.env.APP_DOMAIN 
+              : 'http://localhost:8000';
+            // Get backport target branch from environment variable or use default
+            // Set BACKPORT_TARGET_BRANCH in: Settings → Secrets and variables → Actions → Variables
+            const backportTargetBranch = process.env.BACKPORT_TARGET_BRANCH && process.env.BACKPORT_TARGET_BRANCH.trim() !== ''
+              ? process.env.BACKPORT_TARGET_BRANCH
+              : 'release/v1.0';
             const repoOwner = context.repo.owner;
             const repoName = context.repo.repo;
             
             // Build URLs for workflows
             const testUrl = `${appDomain}/workflow/trigger?owner=${repoOwner}&repo=${repoName}&workflow_id=test.yml&ref=${prBranch}&test_type=all&from_pr=${prNumber}`;
-            const backportUrl = `${appDomain}/workflow/trigger?owner=${repoOwner}&repo=${repoName}&workflow_id=backport.yml&ref=${prBranch}&source_branch=${baseBranch}&target_branch=release/v1.0&from_pr=${prNumber}`;
+            const backportUrl = `${appDomain}/workflow/trigger?owner=${repoOwner}&repo=${repoName}&workflow_id=backport.yml&ref=${prBranch}&source_branch=${baseBranch}&target_branch=${backportTargetBranch}&from_pr=${prNumber}`;
             
             const comment = '## 🚀 Quick Actions\n\n' +
               'Use these badges to quickly run workflows for this PR:\n\n' +
@@ -100,7 +114,7 @@ jobs:
               '[![▶ Backport](https://img.shields.io/badge/▶_Backport-2196f3?style=flat-square)](' + backportUrl + ')\n\n' +
               '### Direct Links:\n' +
               '- [Run Tests](' + testUrl + ')\n' +
-              '- [Backport to release/v1.0](' + backportUrl + ')\n\n' +
+              '- [Backport to ' + backportTargetBranch + '](' + backportUrl + ')\n\n' +
               '---\n' +
               '*These links will automatically comment on this PR with the workflow results.*';
 
