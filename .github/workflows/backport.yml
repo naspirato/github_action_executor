@@ -124,11 +124,24 @@ jobs:
           BACKPORT_BRANCH="backport/${{ inputs.target_branch }}-$(date +%s)"
           git checkout -b "$BACKPORT_BRANCH" "${{ inputs.target_branch }}"
           
-          # Cherry-pick all commits
-          git cherry-pick origin/"${{ inputs.target_branch }}"..origin/"${{ inputs.source_branch }}" || {
-            echo "Cherry-pick failed, this might be due to conflicts"
-            exit 1
-          }
+          # Cherry-pick all commits, skipping merge commits
+          # Get list of non-merge commits
+          COMMIT_LIST=$(git log --no-merges --cherry-pick --oneline origin/"${{ inputs.target_branch }}"..origin/"${{ inputs.source_branch }}" | cut -d' ' -f1)
+          
+          if [ -z "$COMMIT_LIST" ]; then
+            echo "No non-merge commits to backport"
+            echo "has_changes=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          
+          # Cherry-pick each commit individually
+          for commit in $COMMIT_LIST; do
+            echo "Cherry-picking commit $commit"
+            git cherry-pick "$commit" || {
+              echo "Cherry-pick failed for commit $commit, this might be due to conflicts"
+              exit 1
+            }
+          done
           
           echo "has_changes=true" >> $GITHUB_OUTPUT
           echo "backport_branch=$BACKPORT_BRANCH" >> $GITHUB_OUTPUT
@@ -142,7 +155,7 @@ jobs:
           BACKPORT_PAT: ${{ secrets.BACKPORT_PAT }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+          github-token: ${{ secrets.BACKPORT_PAT != '' && secrets.BACKPORT_PAT || secrets.GITHUB_TOKEN }}
           script: |
             const sourceBranch = '${{ inputs.source_branch }}';
             const targetBranch = '${{ inputs.target_branch }}';
