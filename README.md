@@ -375,6 +375,327 @@ docker-compose up -d
 4. Настройте переменные окружения
 5. Создайте API Gateway для публичного доступа
 
+## Flow запуска workflow
+
+Ниже представлены диаграммы пользовательских потоков для разных сценариев запуска workflow:
+
+### Сценарий 1: Запуск через веб-интерфейс (полное заполнение вручную)
+
+```mermaid
+flowchart TD
+    Start([Пользователь открывает веб-интерфейс]) --> CheckAuth{Авторизован в GitHub?}
+    CheckAuth -->|Нет| Login[Авторизация через GitHub OAuth]
+    CheckAuth -->|Да| ShowForm[Показать форму запуска]
+    
+    Login --> OAuth[Редирект на GitHub]
+    OAuth --> GitHubAuth[Авторизация на GitHub]
+    GitHubAuth --> Callback[Возврат с токеном]
+    Callback --> Verify[Проверка безопасности]
+    Verify --> SaveSession[Сохранение сессии]
+    SaveSession --> ShowForm
+    
+    ShowForm --> FillForm[Заполнить форму вручную:<br/>- Выбрать репозиторий<br/>- Выбрать workflow<br/>- Выбрать ветку<br/>- Заполнить все параметры]
+    FillForm --> SubmitForm["Нажать кнопку Запустить Workflow"]
+    SubmitForm --> CheckPerm{Проверка прав включена?}
+    CheckPerm -->|Нет| TriggerWorkflow
+    CheckPerm -->|Да| CheckCollaborator{Пользователь является<br/>коллаборатором репозитория?}
+    CheckCollaborator -->|Нет| ErrorAccess["Ошибка: нет доступа<br/>Только коллабораторы могут запускать workflows"]
+    CheckCollaborator -->|Да| TriggerWorkflow[Запуск workflow в GitHub]
+    TriggerWorkflow --> SuccessPage["Страница с результатом:<br/>- Ссылка на запуск<br/>- Статус выполнения"]
+    
+    classDef userAction fill:#e3f2fd,stroke:#1976d2,stroke-width:3px
+    classDef authClass fill:#fff3e0,stroke:#f57c00,stroke-width:2px
+    classDef checkClass fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px
+    classDef triggerClass fill:#e8f5e9,stroke:#388e3c,stroke-width:3px
+    classDef errorClass fill:#ffebee,stroke:#c62828,stroke-width:2px
+    classDef resultClass fill:#e0f2f1,stroke:#00695c,stroke-width:2px
+    
+    class FillForm,SubmitForm,ShowForm userAction
+    class Login,OAuth,GitHubAuth,Callback,Verify,SaveSession authClass
+    class CheckPerm,CheckCollaborator checkClass
+    class TriggerWorkflow triggerClass
+    class ErrorAccess errorClass
+    class SuccessPage resultClass
+```
+
+### Сценарий 2: Запуск по прямой ссылке из PR/документации
+
+```mermaid
+flowchart TD
+    Start([Пользователь переходит по ссылке]) --> CheckLinkType{Тип ссылки?}
+    CheckLinkType -->|Ссылка для запуска| DirectLaunch[Сразу запустить workflow]
+    CheckLinkType -->|Ссылка на форму ui=true| PrefilledForm[Открыть предзаполненную форму]
+    
+    DirectLaunch --> CheckAuth1{Авторизован?}
+    CheckAuth1 -->|Нет| SaveLink1[Сохранить ссылку]
+    SaveLink1 --> Login1[Авторизация через GitHub OAuth]
+    CheckAuth1 -->|Да| CheckPerm1{Проверка прав включена?}
+    
+    PrefilledForm --> CheckAuth2{Авторизован?}
+    CheckAuth2 -->|Нет| SaveLink2[Сохранить ссылку]
+    SaveLink2 --> Login2[Авторизация через GitHub OAuth]
+    CheckAuth2 -->|Да| ShowPrefilledForm[Показать форму с предзаполненными параметрами]
+    ShowPrefilledForm --> EditParams[При необходимости изменить параметры]
+    EditParams --> SubmitForm["Нажать кнопку Запустить Workflow"]
+    SubmitForm --> CheckPerm1
+    
+    Login1 --> OAuth[Редирект на GitHub]
+    Login2 --> OAuth
+    OAuth --> GitHubAuth[Авторизация на GitHub]
+    GitHubAuth --> Callback[Возврат с токеном]
+    Callback --> Verify[Проверка безопасности]
+    Verify --> SaveSession[Сохранение сессии]
+    SaveSession --> RestoreLink[Вернуться к сохраненной ссылке]
+    RestoreLink --> CheckPerm1
+    
+    CheckPerm1 -->|Нет| TriggerWorkflow
+    CheckPerm1 -->|Да| CheckCollaborator{Пользователь является<br/>коллаборатором репозитория?}
+    CheckCollaborator -->|Нет| ErrorAccess["Ошибка: нет доступа<br/>Только коллабораторы могут запускать workflows"]
+    CheckCollaborator -->|Да| TriggerWorkflow[Запуск workflow в GitHub]
+    TriggerWorkflow --> SuccessPage["Страница с результатом:<br/>- Ссылка на запуск<br/>- Статус выполнения"]
+    
+    classDef userAction fill:#e3f2fd,stroke:#1976d2,stroke-width:3px
+    classDef authClass fill:#fff3e0,stroke:#f57c00,stroke-width:2px
+    classDef checkClass fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px
+    classDef triggerClass fill:#e8f5e9,stroke:#388e3c,stroke-width:3px
+    classDef errorClass fill:#ffebee,stroke:#c62828,stroke-width:2px
+    classDef resultClass fill:#e0f2f1,stroke:#00695c,stroke-width:2px
+    
+    class DirectLaunch,PrefilledForm,ShowPrefilledForm,EditParams,SubmitForm userAction
+    class Login1,Login2,OAuth,GitHubAuth,Callback,Verify,SaveSession authClass
+    class CheckPerm1,CheckCollaborator checkClass
+    class TriggerWorkflow triggerClass
+    class ErrorAccess errorClass
+    class SuccessPage resultClass
+```
+
+### Сценарий 3: Запуск через REST API (для автоматизации)
+
+```mermaid
+flowchart TD
+    Start([Программный запрос через API]) --> ExplainAPI["API позволяет:<br/>- Интегрировать в CI/CD<br/>- Создавать скрипты<br/>- Автоматизировать процессы"]
+    ExplainAPI --> CheckAuth{Авторизован?}
+    CheckAuth -->|Нет| ErrorAuth[401 Unauthorized:<br/>Требуется авторизация]
+    CheckAuth -->|Да| CheckPerm{Проверка прав включена?}
+    CheckPerm -->|Нет| TriggerWorkflow
+    CheckPerm -->|Да| CheckCollaborator{Пользователь является<br/>коллаборатором репозитория?}
+    CheckCollaborator -->|Нет| ErrorAccess[403 Forbidden:<br/>Только коллабораторы могут запускать workflows]
+    CheckCollaborator -->|Да| TriggerWorkflow[Запуск workflow в GitHub]
+    TriggerWorkflow --> JSONResult["JSON ответ:<br/>- run_id<br/>- run_url<br/>- статус<br/>- trigger_time"]
+    
+    classDef apiClass fill:#fce4ec,stroke:#c2185b,stroke-width:2px
+    classDef checkClass fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px
+    classDef triggerClass fill:#e8f5e9,stroke:#388e3c,stroke-width:3px
+    classDef errorClass fill:#ffebee,stroke:#c62828,stroke-width:2px
+    classDef resultClass fill:#e0f2f1,stroke:#00695c,stroke-width:2px
+    
+    class ExplainAPI apiClass
+    class CheckPerm,CheckCollaborator checkClass
+    class TriggerWorkflow triggerClass
+    class ErrorAuth,ErrorAccess errorClass
+    class JSONResult resultClass
+```
+
+### Сценарий 4: Как работает авторизация через GitHub OAuth
+
+```mermaid
+flowchart TD
+    Start([Пользователь начинает работу]) --> NeedAuth{Требуется авторизация?}
+    NeedAuth -->|Да| InitOAuth[Инициировать OAuth авторизацию]
+    NeedAuth -->|Нет| AlreadyAuth[Уже авторизован, работа продолжается]
+    
+    InitOAuth --> GenerateState[Генерация state токена<br/>для защиты от CSRF]
+    GenerateState --> SaveState[Сохранение state в сессии]
+    SaveState --> BuildOAuthURL[Построение OAuth URL:<br/>- Client ID<br/>- Redirect URI<br/>- State токен<br/>- Scopes: repo, workflow]
+    BuildOAuthURL --> RedirectGitHub[Редирект на GitHub]
+    
+    RedirectGitHub --> GitHubLogin[Пользователь авторизуется на GitHub]
+    GitHubLogin --> UserApproves{Пользователь одобряет<br/>разрешения?}
+    UserApproves -->|Нет| CancelAuth[Отмена авторизации]
+    UserApproves -->|Да| GitHubCallback[GitHub возвращает<br/>authorization code]
+    
+    GitHubCallback --> VerifyState[Проверка state токена<br/>совпадает с сохраненным?]
+    VerifyState -->|Нет| ErrorCSRF[Ошибка: неверный state<br/>Возможная CSRF атака]
+    VerifyState -->|Да| ExchangeCode[Обмен authorization code<br/>на access_token]
+    
+    ExchangeCode --> GetUserInfo[Получение информации о пользователе<br/>через GitHub API]
+    GetUserInfo --> SaveSession["Сохранение в сессию:<br/>- access_token<br/>- user info login, name, avatar"]
+    SaveSession --> SessionReady[Сессия готова, пользователь авторизован]
+    
+    SessionReady --> CheckScopes{Какие разрешения получены?}
+    CheckScopes --> ScopesRepo["repo scope:<br/>- Чтение/запись репозиториев<br/>- Проверка доступа к репозиториям"]
+    CheckScopes --> ScopesWorkflow["workflow scope:<br/>- Запуск workflows<br/>- Просмотр workflow runs"]
+    
+    CancelAuth --> AuthFailed[Авторизация не завершена]
+    ErrorCSRF --> AuthFailed
+    
+    classDef authFlow fill:#e3f2fd,stroke:#1976d2,stroke-width:2px
+    classDef security fill:#fff3e0,stroke:#f57c00,stroke-width:2px
+    classDef success fill:#e8f5e9,stroke:#388e3c,stroke-width:2px
+    classDef error fill:#ffebee,stroke:#c62828,stroke-width:2px
+    classDef scopes fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px
+    
+    class InitOAuth,GenerateState,SaveState,BuildOAuthURL,RedirectGitHub,GitHubLogin,ExchangeCode,GetUserInfo,SaveSession authFlow
+    class VerifyState,ErrorCSRF security
+    class SessionReady,AlreadyAuth success
+    class CancelAuth,AuthFailed error
+    class ScopesRepo,ScopesWorkflow scopes
+```
+
+**Требуемые разрешения (OAuth Scopes):**
+- `repo` - доступ к репозиториям (чтение/запись)
+- `workflow` - запуск и управление GitHub Actions workflows
+
+**Безопасность:**
+- State токен защищает от CSRF атак
+- Access token хранится только в сессии сервера
+- Токен используется для проверки доступа к репозиториям
+
+### Сценарий 5: Подключение к проекту/организации
+
+```mermaid
+flowchart TD
+    Start([Настройка системы для проекта]) --> CreateOAuth[1. Создать GitHub OAuth App]
+    CreateOAuth --> OAuthSettings["Настройки OAuth App:<br/>- Application name<br/>- Homepage URL<br/>- Authorization callback URL"]
+    OAuthSettings --> GetOAuthCreds["Получить credentials:<br/>- Client ID<br/>- Client Secret"]
+    
+    GetOAuthCreds --> CreateGitHubApp[2. Создать GitHub App]
+    CreateGitHubApp --> AppSettings["Настройки GitHub App:<br/>- App name<br/>- Homepage URL<br/>- Permissions:<br/>  • Actions: Read and write<br/>  • Contents: Read-only<br/>  • Metadata: Read-only"]
+    AppSettings --> GenerateKey[Сгенерировать Private Key<br/>и скачать .pem файл]
+    GenerateKey --> GetAppID[Получить App ID]
+    
+    GetAppID --> InstallApp[3. Установить GitHub App]
+    InstallApp --> ChooseTarget{Куда установить?}
+    ChooseTarget -->|В репозиторий| InstallRepo[Установить в конкретный репозиторий]
+    ChooseTarget -->|В организацию| InstallOrg[Установить в организацию]
+    ChooseTarget -->|На аккаунт| InstallAccount[Установить на аккаунт]
+    
+    InstallRepo --> GetInstallID1[Получить Installation ID<br/>из URL установки]
+    InstallOrg --> GetInstallID2[Получить Installation ID<br/>из URL установки]
+    InstallAccount --> GetInstallID3[Получить Installation ID<br/>из URL установки]
+    
+    GetInstallID1 --> ConfigureEnv[4. Настроить переменные окружения]
+    GetInstallID2 --> ConfigureEnv
+    GetInstallID3 --> ConfigureEnv
+    
+    ConfigureEnv --> EnvVars["Установить переменные:<br/>- GITHUB_CLIENT_ID<br/>- GITHUB_CLIENT_SECRET<br/>- GITHUB_APP_ID<br/>- GITHUB_APP_INSTALLATION_ID<br/>- GITHUB_APP_PRIVATE_KEY_PATH"]
+    EnvVars --> PlaceKey[Разместить приватный ключ<br/>в безопасном месте]
+    PlaceKey --> TestConnection[5. Проверить подключение]
+    
+    TestConnection --> TestOAuth[Тест OAuth авторизации]
+    TestOAuth --> TestApp[Тест GitHub App токена]
+    TestApp --> TestWorkflow[Тест запуска workflow]
+    TestWorkflow --> Success[Система готова к работе]
+    
+    classDef setup fill:#e3f2fd,stroke:#1976d2,stroke-width:2px
+    classDef credentials fill:#fff3e0,stroke:#f57c00,stroke-width:2px
+    classDef install fill:#e8f5e9,stroke:#388e3c,stroke-width:2px
+    classDef config fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px
+    classDef test fill:#e0f2f1,stroke:#00695c,stroke-width:2px
+    
+    class CreateOAuth,OAuthSettings,CreateGitHubApp,AppSettings setup
+    class GetOAuthCreds,GenerateKey,GetAppID credentials
+    class InstallApp,ChooseTarget,InstallRepo,InstallOrg,InstallAccount,GetInstallID1,GetInstallID2,GetInstallID3 install
+    class ConfigureEnv,EnvVars,PlaceKey config
+    class TestConnection,TestOAuth,TestApp,TestWorkflow,Success test
+```
+
+**Шаги подключения:**
+
+1. **Создать OAuth App** - для авторизации пользователей
+2. **Создать GitHub App** - для запуска workflows от имени приложения
+3. **Установить GitHub App** - в репозиторий, организацию или на аккаунт
+4. **Настроить переменные окружения** - указать все credentials
+5. **Проверить подключение** - убедиться, что все работает
+
+### Сценарий 6: Архитектура системы и взаимодействие компонентов
+
+```mermaid
+flowchart LR
+    User([Пользователь]) --> WebApp[Веб-приложение<br/>FastAPI]
+    WebApp --> OAuthService[OAuth Service]
+    WebApp --> GitHubApp[GitHub App Service]
+    WebApp --> Permissions[Permissions Service]
+    WebApp --> WorkflowService[Workflow Service]
+    
+    OAuthService --> GitHubOAuth[GitHub OAuth API]
+    GitHubApp --> GitHubAppAPI[GitHub App API<br/>JWT + Installation Token]
+    Permissions --> GitHubRepoAPI[GitHub Repository API]
+    WorkflowService --> GitHubActionsAPI[GitHub Actions API<br/>Workflow Dispatch]
+    
+    GitHubOAuth -->|Access Token| UserSession[Сессия пользователя]
+    GitHubAppAPI -->|Installation Token| AppAuth[Авторизация App]
+    
+    UserSession -->|Проверка доступа| Permissions
+    AppAuth -->|Запуск workflow| WorkflowService
+    
+    WorkflowService -->|Запуск| GitHubActions[GitHub Actions<br/>Workflow Run]
+    GitHubActions -->|Результат| User
+    
+    classDef user fill:#e3f2fd,stroke:#1976d2,stroke-width:3px
+    classDef app fill:#fff3e0,stroke:#f57c00,stroke-width:2px
+    classDef service fill:#e8f5e9,stroke:#388e3c,stroke-width:2px
+    classDef github fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px
+    classDef storage fill:#e0f2f1,stroke:#00695c,stroke-width:2px
+    
+    class User user
+    class WebApp app
+    class OAuthService,GitHubApp,Permissions,WorkflowService service
+    class GitHubOAuth,GitHubAppAPI,GitHubRepoAPI,GitHubActionsAPI,GitHubActions github
+    class UserSession,AppAuth storage
+```
+
+**Компоненты системы:**
+
+- **Веб-приложение (FastAPI)** - основной сервер приложения
+- **OAuth Service** - управление авторизацией пользователей
+- **GitHub App Service** - генерация JWT и получение installation токенов
+- **Permissions Service** - проверка прав доступа к репозиториям
+- **Workflow Service** - запуск workflows через GitHub API
+
+**Взаимодействие:**
+- Пользователь авторизуется через OAuth → получает access token
+- GitHub App использует JWT для получения installation token
+- Permissions проверяет доступ через Repository API
+- Workflow Service запускает workflow через Actions API
+
+### Описание пользовательских потоков
+
+1. **Запуск через веб-интерфейс** (основной способ):
+   - Пользователь открывает веб-интерфейс
+   - Если не авторизован → автоматический редирект на GitHub для авторизации
+   - После авторизации показывается форма с выбором репозитория, workflow, ветки и параметров
+   - Форма автоматически подгружает доступные workflows и ветки
+   - После заполнения и нажатия "Запустить" → проверка прав → запуск workflow
+   - Показывается страница с результатом и ссылкой на запуск в GitHub Actions
+
+2. **Запуск по прямой ссылке** (быстрый способ):
+   - Пользователь переходит по готовой ссылке (например, из документации или badge)
+   - Если не авторизован → автоматическая авторизация с возвратом к ссылке
+   - Workflow запускается автоматически с параметрами из ссылки
+   - Показывается страница с результатом
+   - **Зачем это нужно**: Можно создать закладки или badges для быстрого запуска часто используемых workflows
+
+3. **Автоматизация через API** (для продвинутых пользователей):
+   - Программный доступ через REST API
+   - Позволяет интегрировать запуск workflows в:
+     - CI/CD пайплайны
+     - Скрипты автоматизации
+     - Другие системы и инструменты
+   - Возвращает JSON с результатом запуска
+   - **Зачем это нужно**: Для автоматизации и интеграции с другими системами
+
+### Ключевые моменты
+
+- **Авторизация**: Требуется один раз через GitHub OAuth, затем сессия сохраняется
+- **Проверка прав**: Система проверяет:
+  - Является ли пользователь коллаборатором репозитория (имеет доступ к репозиторию)
+  - Есть ли у пользователя права на чтение/запись репозитория
+  - Проверка выполняется через GitHub API перед запуском workflow
+  - Можно отключить через настройку `CHECK_PERMISSIONS=false` (не рекомендуется)
+- **Безопасность**: Все запросы защищены от CSRF атак через state параметр в OAuth
+- **Удобство**: После авторизации можно быстро запускать workflows без повторного входа
+
 ## Использование
 
 ### Через веб-интерфейс
