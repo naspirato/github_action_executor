@@ -426,30 +426,28 @@ flowchart TD
     CheckLinkType -->|Ссылка для запуска| DirectLaunch[Сразу запустить workflow]
     CheckLinkType -->|Ссылка на форму ui=true| PrefilledForm[Открыть предзаполненную форму]
     
-    DirectLaunch --> CheckAuth1{Авторизован?}
-    CheckAuth1 -->|Нет| SaveLink1[Сохранить ссылку]
-    SaveLink1 --> Login1[Авторизация через GitHub OAuth]
-    CheckAuth1 -->|Да| CheckPerm1{Проверка прав включена?}
+    DirectLaunch --> CheckAuth{Авторизован?}
+    PrefilledForm --> CheckAuth
     
-    PrefilledForm --> CheckAuth2{Авторизован?}
-    CheckAuth2 -->|Нет| SaveLink2[Сохранить ссылку]
-    SaveLink2 --> Login2[Авторизация через GitHub OAuth]
-    CheckAuth2 -->|Да| ShowPrefilledForm[Показать форму с предзаполненными параметрами]
-    ShowPrefilledForm --> EditParams[При необходимости изменить параметры]
-    EditParams --> SubmitForm["Нажать кнопку Запустить Workflow"]
-    SubmitForm --> CheckPerm1
-    
-    Login1 --> OAuth[Редирект на GitHub]
-    Login2 --> OAuth
+    CheckAuth -->|Нет| SaveLink[Сохранить ссылку]
+    SaveLink --> Login[Авторизация через GitHub OAuth]
+    Login --> OAuth[Редирект на GitHub]
     OAuth --> GitHubAuth[Авторизация на GitHub]
     GitHubAuth --> Callback[Возврат с токеном]
     Callback --> Verify[Проверка безопасности]
     Verify --> SaveSession[Сохранение сессии]
     SaveSession --> RestoreLink[Вернуться к сохраненной ссылке]
-    RestoreLink --> CheckPerm1
+    RestoreLink --> CheckLinkType
     
-    CheckPerm1 -->|Нет| TriggerWorkflow
-    CheckPerm1 -->|Да| CheckCollaborator{Пользователь является<br/>коллаборатором репозитория?}
+    CheckAuth -->|Да| AfterAuth{Откуда пришли?}
+    AfterAuth -->|Ссылка для запуска| CheckPerm{Проверка прав включена?}
+    AfterAuth -->|Ссылка на форму| ShowPrefilledForm[Показать форму с предзаполненными параметрами]
+    ShowPrefilledForm --> EditParams[При необходимости изменить параметры]
+    EditParams --> SubmitForm["Нажать кнопку Запустить Workflow"]
+    SubmitForm --> CheckPerm
+    
+    CheckPerm -->|Нет| TriggerWorkflow
+    CheckPerm -->|Да| CheckCollaborator{Пользователь является<br/>коллаборатором репозитория?}
     CheckCollaborator -->|Нет| ErrorAccess["Ошибка: нет доступа<br/>Только коллабораторы могут запускать workflows"]
     CheckCollaborator -->|Да| TriggerWorkflow[Запуск workflow в GitHub]
     TriggerWorkflow --> SuccessPage["Страница с результатом:<br/>- Ссылка на запуск<br/>- Статус выполнения"]
@@ -462,8 +460,8 @@ flowchart TD
     classDef resultClass fill:#e0f2f1,stroke:#00695c,stroke-width:2px
     
     class DirectLaunch,PrefilledForm,ShowPrefilledForm,EditParams,SubmitForm userAction
-    class Login1,Login2,OAuth,GitHubAuth,Callback,Verify,SaveSession authClass
-    class CheckPerm1,CheckCollaborator checkClass
+    class Login,OAuth,GitHubAuth,Callback,Verify,SaveSession authClass
+    class CheckPerm,CheckCollaborator checkClass
     class TriggerWorkflow triggerClass
     class ErrorAccess errorClass
     class SuccessPage resultClass
@@ -555,58 +553,88 @@ flowchart TD
 
 ```mermaid
 flowchart TD
-    Start([Настройка системы для проекта]) --> CreateOAuth[1. Создать GitHub OAuth App]
+    Start([Настройка системы для проекта]) --> WhoSetup{Кто настраивает?}
+    
+    WhoSetup -->|Админ приложения| AdminApp[Администратор приложения]
+    WhoSetup -->|Админ репозитория| AdminRepo[Администратор репозитория/организации]
+    
+    AdminApp --> CreateOAuth["1. Создать GitHub OAuth App<br/>👤 Админ приложения<br/>📍 GitHub Settings → Developer settings → OAuth Apps<br/>🔗 https://github.com/settings/developers"]
     CreateOAuth --> OAuthSettings["Настройки OAuth App:<br/>- Application name<br/>- Homepage URL<br/>- Authorization callback URL"]
     OAuthSettings --> GetOAuthCreds["Получить credentials:<br/>- Client ID<br/>- Client Secret"]
     
-    GetOAuthCreds --> CreateGitHubApp[2. Создать GitHub App]
+    GetOAuthCreds --> CreateGitHubApp["2. Создать GitHub App<br/>👤 Админ приложения<br/>📍 GitHub Settings → Developer settings → GitHub Apps<br/>🔗 https://github.com/settings/apps"]
     CreateGitHubApp --> AppSettings["Настройки GitHub App:<br/>- App name<br/>- Homepage URL<br/>- Permissions:<br/>  • Actions: Read and write<br/>  • Contents: Read-only<br/>  • Metadata: Read-only"]
     AppSettings --> GenerateKey[Сгенерировать Private Key<br/>и скачать .pem файл]
     GenerateKey --> GetAppID[Получить App ID]
     
-    GetAppID --> InstallApp[3. Установить GitHub App]
+    GetAppID --> InstallApp["3. Установить GitHub App<br/>👤 Админ репозитория/организации<br/>📍 В настройках репозитория или организации"]
     InstallApp --> ChooseTarget{Куда установить?}
-    ChooseTarget -->|В репозиторий| InstallRepo[Установить в конкретный репозиторий]
-    ChooseTarget -->|В организацию| InstallOrg[Установить в организацию]
-    ChooseTarget -->|На аккаунт| InstallAccount[Установить на аккаунт]
+    ChooseTarget -->|В репозиторий| InstallRepo["Установить в репозиторий<br/>📍 Settings → Integrations → GitHub Apps<br/>🔗 https://github.com/OWNER/REPO/settings/installations"]
+    ChooseTarget -->|В организацию| InstallOrg["Установить в организацию<br/>📍 Organization Settings → GitHub Apps<br/>🔗 https://github.com/organizations/ORG/settings/installations"]
+    ChooseTarget -->|На аккаунт| InstallAccount["Установить на аккаунт<br/>📍 Settings → Applications → Installed GitHub Apps<br/>🔗 https://github.com/settings/installations"]
     
-    InstallRepo --> GetInstallID1[Получить Installation ID<br/>из URL установки]
-    InstallOrg --> GetInstallID2[Получить Installation ID<br/>из URL установки]
-    InstallAccount --> GetInstallID3[Получить Installation ID<br/>из URL установки]
+    InstallRepo --> GetInstallID1["Получить Installation ID<br/>📍 Из URL после установки<br/>Пример: .../installations/12345678"]
+    InstallOrg --> GetInstallID2["Получить Installation ID<br/>📍 Из URL после установки<br/>Пример: .../installations/12345678"]
+    InstallAccount --> GetInstallID3["Получить Installation ID<br/>📍 Из URL после установки<br/>Пример: .../installations/12345678"]
     
-    GetInstallID1 --> ConfigureEnv[4. Настроить переменные окружения]
+    GetInstallID1 --> ConfigureEnv["4. Настроить переменные окружения<br/>👤 Админ приложения<br/>📍 На сервере приложения"]
     GetInstallID2 --> ConfigureEnv
     GetInstallID3 --> ConfigureEnv
     
     ConfigureEnv --> EnvVars["Установить переменные:<br/>- GITHUB_CLIENT_ID<br/>- GITHUB_CLIENT_SECRET<br/>- GITHUB_APP_ID<br/>- GITHUB_APP_INSTALLATION_ID<br/>- GITHUB_APP_PRIVATE_KEY_PATH"]
     EnvVars --> PlaceKey[Разместить приватный ключ<br/>в безопасном месте]
-    PlaceKey --> TestConnection[5. Проверить подключение]
+    PlaceKey --> TestConnection["5. Проверить подключение<br/>👤 Админ приложения"]
     
     TestConnection --> TestOAuth[Тест OAuth авторизации]
     TestOAuth --> TestApp[Тест GitHub App токена]
     TestApp --> TestWorkflow[Тест запуска workflow]
     TestWorkflow --> Success[Система готова к работе]
     
-    classDef setup fill:#e3f2fd,stroke:#1976d2,stroke-width:2px
-    classDef credentials fill:#fff3e0,stroke:#f57c00,stroke-width:2px
-    classDef install fill:#e8f5e9,stroke:#388e3c,stroke-width:2px
-    classDef config fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px
-    classDef test fill:#e0f2f1,stroke:#00695c,stroke-width:2px
+    AdminRepo --> InstallApp
     
-    class CreateOAuth,OAuthSettings,CreateGitHubApp,AppSettings setup
-    class GetOAuthCreds,GenerateKey,GetAppID credentials
-    class InstallApp,ChooseTarget,InstallRepo,InstallOrg,InstallAccount,GetInstallID1,GetInstallID2,GetInstallID3 install
-    class ConfigureEnv,EnvVars,PlaceKey config
-    class TestConnection,TestOAuth,TestApp,TestWorkflow,Success test
+    classDef adminApp fill:#e3f2fd,stroke:#1976d2,stroke-width:2px
+    classDef adminRepo fill:#fff3e0,stroke:#f57c00,stroke-width:2px
+    classDef setup fill:#e8f5e9,stroke:#388e3c,stroke-width:2px
+    classDef credentials fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px
+    classDef install fill:#e0f2f1,stroke:#00695c,stroke-width:2px
+    classDef config fill:#ffebee,stroke:#c62828,stroke-width:2px
+    classDef test fill:#fce4ec,stroke:#c2185b,stroke-width:2px
+    
+    class AdminApp,CreateOAuth,CreateGitHubApp,ConfigureEnv,TestConnection adminApp
+    class AdminRepo,InstallApp,ChooseTarget,InstallRepo,InstallOrg,InstallAccount adminRepo
+    class OAuthSettings,AppSettings setup
+    class GetOAuthCreds,GenerateKey,GetAppID,PlaceKey credentials
+    class GetInstallID1,GetInstallID2,GetInstallID3 install
+    class EnvVars config
+    class TestOAuth,TestApp,TestWorkflow,Success test
 ```
 
 **Шаги подключения:**
 
-1. **Создать OAuth App** - для авторизации пользователей
-2. **Создать GitHub App** - для запуска workflows от имени приложения
-3. **Установить GitHub App** - в репозиторий, организацию или на аккаунт
-4. **Настроить переменные окружения** - указать все credentials
-5. **Проверить подключение** - убедиться, что все работает
+1. **Создать OAuth App** (Админ приложения)
+   - Где: GitHub Settings → Developer settings → OAuth Apps
+   - Ссылка: https://github.com/settings/developers
+   - Для чего: авторизация пользователей через OAuth
+
+2. **Создать GitHub App** (Админ приложения)
+   - Где: GitHub Settings → Developer settings → GitHub Apps
+   - Ссылка: https://github.com/settings/apps
+   - Для чего: запуск workflows от имени приложения
+
+3. **Установить GitHub App** (Админ репозитория/организации)
+   - В репозиторий: Settings → Integrations → GitHub Apps
+   - В организацию: Organization Settings → GitHub Apps
+   - На аккаунт: Settings → Applications → Installed GitHub Apps
+   - Для чего: предоставить приложению доступ к репозиториям
+
+4. **Настроить переменные окружения** (Админ приложения)
+   - Где: на сервере приложения (файл .env или переменные окружения)
+   - Что настроить: все credentials из предыдущих шагов
+
+5. **Проверить подключение** (Админ приложения)
+   - Проверить OAuth авторизацию
+   - Проверить получение GitHub App токена
+   - Проверить запуск workflow
 
 ### Сценарий 6: Архитектура системы и взаимодействие компонентов
 
