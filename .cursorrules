@@ -12,7 +12,7 @@ This is a FastAPI web application for triggering GitHub Actions workflows with O
 ## Project Structure
 - `app.py` - Main FastAPI application entry point
 - `backend/routes/` - API route handlers (auth, workflow, api)
-- `backend/services/` - Business logic services (GitHub API, OAuth, permissions)
+- `backend/services/` - Business logic services (GitHub API, OAuth, permissions) m
 - `frontend/templates/` - Jinja2 HTML templates
 - `frontend/static/` - Static files (CSS, images)
 - `tests/` - Pytest test suite
