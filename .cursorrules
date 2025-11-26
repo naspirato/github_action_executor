@@ -16,7 +16,7 @@ This is a FastAPI web application for triggering GitHub Actions workflows with O
 - `frontend/templates/` - Jinja2 HTML templates
 - `frontend/static/` - Static files (CSS, images)
 - `tests/` - Pytest test suite
-- `config.py` - Application configuration
+- `config.py` - Application configuration asdasd
 
 ## Running Commands
 - **Start application (development)**: `python app.py` or `uvicorn app:app --host 0.0.0.0 --port 8000 --reload`
