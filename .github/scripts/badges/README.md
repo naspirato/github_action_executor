@@ -1,225 +1,158 @@
 # Badge Generator Scripts
 
-Universal Python module for generating GitHub Actions workflow trigger badges.
+Simple Python scripts for generating GitHub Actions workflow trigger badges in PR comments.
 
 ## 📁 File Structure
 
 ```
-.github/scripts/badges/
-├── generate_badges.py          # Core module (low-level API) - REQUIRED
-├── generate_markdown.py          # Markdown generator script - REQUIRED
-├── README.md                   # This file
-├── configs/
-│   └── badge_config.json       # Main badge configuration
-├── preview/
-│   └── preview_config.py      # Preview JSON config as markdown
-└── examples/
-    ├── example_config.json     # Example configuration
-    └── example_config.md       # Visualization of example config
+.github/
+├── scripts/badges/
+│   ├── generate_badges.py      # Library - badge generation functions
+│   ├── comment_template.py     # Template script with subcommands
+│   ├── vars.json               # Test variables (example)
+│   └── README.md               # This file
+└── configs/
+    └── branches.json           # Branches list for backport
 ```
 
 ## 🎯 Quick Start
 
-### Option 0: Preview Your Config (Simplest)
-
-Edit your JSON config in `.github/scripts/badges/configs/badge_config.json` and preview markdown:
+### Basic Usage
 
 ```bash
-# Simple: config -> markdown (prints to stdout, uses defaults)
-python3 .github/scripts/badges/preview/preview_config.py configs/badge_config.json
-
-# Save to file
-python3 .github/scripts/badges/preview/preview_config.py configs/badge_config.json --output preview.md
-
-# With custom parameters
-python3 .github/scripts/badges/preview/preview_config.py configs/badge_config.json \
-  --app-domain https://my-app.com \
-  --repo-owner owner \
-  --repo-name repo \
-  --pr-number 123
-```
-
-### Option 1: JSON Configuration (For GitHub Actions)
-
-Create a JSON config file (see `configs/badge_config.json` for reference) and use `generate_markdown.py` in your workflow.
-
-### Option 1: JSON Configuration (For GitHub Actions)
-
-Create a JSON config file (see `examples/example_config.json` for reference):
-
-```json
-{
-  "workflows": [
-    {
-      "title": "🧪 Run Tests",
-      "type": "table",
-      "workflow_id": "test.yml",
-      "rows": [...]
-    }
-  ],
-  "backport_branches": ["release/v1.0"],
-  "legend": {...}
-}
-```
-
-Then use `generate_markdown.py`:
-
-```bash
-    python3 .github/scripts/badges/generate_markdown.py \
-  --config badge_config.json \
-  --app-domain "https://your-app.com" \
-  --repo-owner "owner" \
-  --repo-name "repo" \
-  --pr-number 123 \
-  --pr-branch "feature" \
-  --base-branch "main" \
+# Generate PR actions comment (tests + backport)
+python3 .github/scripts/badges/comment_template.py \
+  --vars vars.json \
+  pr_actions \
+  --branches-file branches.json \
   --output comment.txt
 ```
 
+### Comment Types
+
+#### 1. `pr_actions` - Full PR comment with tests and backport
+
+```bash
+python3 comment_template.py --vars vars.json pr_actions \
+  --branches-file branches.json \
+  [--test-rows '[...]']
+```
+
+**Required:**
+- `--branches-file` - JSON file with branches list
+
+**Optional:**
+- `--test-rows` - JSON array with test rows: `[["Label", {"input": "value"}, "color"], ...]`
+
+#### 2. `simple` - Simple comment with custom badges
+
+```bash
+python3 comment_template.py --vars vars.json simple \
+  --badge "🧪 Tests" "Run Tests" "test.yml" \
+  --badge-color "4caf50" \
+  --badge "🔨 Build" "Build" "build.yml" \
+  --badge-color "2196f3" \
+  [--header "Custom Header"] \
+  [--footer "Custom Footer"]
+```
+
+**Required:**
+- `--badge TITLE TEXT WORKFLOW` - At least one badge (can be repeated)
+
+**Optional per badge:**
+- `--badge-color COLOR` - Color for last badge
+- `--badge-icon ICON` - Icon for last badge
+- `--badge-ref REF` - Branch for last badge
+- `--badge-inputs JSON` - JSON inputs for last badge
+- `--badge-only-ui` - Only UI badge for last badge
+
+#### 3. `table_only` - Comment with only a table
+
+```bash
+python3 comment_template.py --vars vars.json table_only \
+  --workflow "test.yml" \
+  --rows '[["All", {"test_type": "all"}, "4caf50"], ["Unit", {"test_type": "unit"}, "2196f3"]]' \
+  --columns '["Test", "Actions"]' \
+  [--ref "main"] \
+  [--badge-text "Run"] \
+  [--header "Custom Header"]
+```
+
+**Required:**
+- `--workflow` - Workflow file name
+- `--rows` - JSON array: `[["Label", {"input": "value"}, "color"], ...]`
+
+**Optional:**
+- `--columns` - JSON array with column headers (default: `["Label", "Actions"]`)
+- `--ref` - Branch name (default: `main`)
+- `--badge-text` - Badge text (default: label)
+- `--header` - Comment header (default: `## 🚀 Quick Actions`)
+
 ## 📚 Architecture
 
-### Core Module (`generate_badges.py`) - **CORE, REQUIRED**
+### Library (`generate_badges.py`)
 
-**Low-Level Functions (Core API):**
+Core badge generation functions:
+
 - `BadgeGenerator` class - Main generator
-- `create_badge()` - Generate a single badge (direct or UI)
-- `create_badge_pair()` - Generate a pair of badges (direct + UI)
-- `create_table()` - Generate a markdown table with custom row formatter
+- `create_badge()` - Single badge (direct or UI)
+- `create_badge_pair()` - Pair of badges (direct + UI)
+- `create_table()` - Markdown table with badges
+- `badge()` - Helper with placeholder replacement
+- `table()` - Helper with placeholder replacement
 
-**High-Level Helpers (Optional):**
-- `create_backport_table()` - Convenience wrapper for backport tables
-- `generate_comment()` - Generate complete PR comment
+### Template (`comment_template.py`)
 
-**Purpose:** Foundation for all badge generation. Used by other modules.
+Script with subcommands for different comment types:
 
-### Markdown Generator Script (`generate_markdown.py`) - **REQUIRED for GitHub Actions**
+- `pr_actions` - Full PR comment
+- `simple` - Custom badges
+- `table_only` - Table only
 
-Wrapper script used in GitHub Actions workflows:
-- Reads JSON config file
-- Uses `BadgeGenerator` from `generate_badges.py`
-- Generates complete PR comment
-- Used in `.github/workflows/pr-badges.yml`
+Edit `comment_template.py` to customize templates!
 
-**Purpose:** Entry point for GitHub Actions workflows. Reads JSON config and generates markdown.
+## 🔧 Variables File Format
 
-### Preview Script (`preview_config.py`) - **For previewing configs**
-
-Simple script to preview your JSON config as markdown:
-- Uses sensible defaults (no need to specify all parameters)
-- Can customize all parameters via command-line flags
-- Perfect for editing JSON and seeing the result
-
-**Purpose:** Quick preview tool for editing and testing badge configurations.
-
-**Usage:**
-```bash
-# Simple: just config path (uses defaults)
-python3 .github/scripts/badges/preview/preview_config.py configs/badge_config.json
-
-# Save to file
-python3 .github/scripts/badges/preview/preview_config.py configs/badge_config.json --output preview.md
-
-# With custom parameters
-python3 .github/scripts/badges/preview/preview_config.py configs/badge_config.json \
-  --app-domain https://my-app.com \
-  --repo-owner owner \
-  --repo-name repo \
-  --pr-number 123
-```
-
-## 📖 Examples
-
-- **`examples/example_config.json`** - Complete example configuration
-- **`examples/example_config.md`** - Visualization of what the example config generates
-
-## 🔧 Configuration Format
-
-### Simple Badge Pair
-
+`vars.json`:
 ```json
 {
-  "workflows": [
-    {
-      "title": "🔨 Build",
-      "type": "pair",
-      "workflow_id": "build.yml",
-      "ref": "main",
-      "inputs": {"build_type": "release"},
-      "badge_color": "2196f3",
-      "icon": "🔨"
-    }
-  ]
-}
-```
-
-### Table with Multiple Rows
-
-```json
-{
-  "workflows": [
-    {
-      "title": "🧪 Run Tests",
-      "type": "table",
-      "workflow_id": "test.yml",
-      "column_headers": ["Sanitizer", "Actions"],
-      "label_key": "sanitizer",
-      "rows": [
-        {
-          "sanitizer": "Address",
-          "badge_color": "4caf50",
-          "inputs": {"sanitizer": "address"}
-        },
-        {
-          "sanitizer": "Memory",
-          "badge_color": "2196f3",
-          "inputs": {"sanitizer": "memory"}
-        }
-      ]
-    }
-  ]
-}
-```
-
-### Legend Configuration
-
-```json
-{
-  "legend": {
-    "enabled": true,
-    "direct_text": "▶ - immediately runs the workflow with default parameters.",
-    "ui_text": "⚙️ - opens UI to review and modify parameters before running."
-  }
+  "app_domain": "https://your-app.com",
+  "repo_owner": "owner",
+  "repo_name": "repo",
+  "pr_number": 123,
+  "pr_branch": "feature-branch",
+  "base_branch": "main"
 }
 ```
 
 ## 🚀 Integration
 
-### Copy to Your Repository
-
-```bash
-mkdir -p .github/scripts/badges
-cp generate_badges.py generate_markdown.py .github/scripts/badges/
-```
-
 ### Use in GitHub Actions
 
 ```yaml
-- name: Generate badges
+- name: Generate badge comment
   run: |
-    python3 .github/scripts/badges/generate_markdown.py \
-      --config badge_config.json \
-      --app-domain "${{ vars.APP_DOMAIN }}" \
-      --repo-owner "${{ github.repository_owner }}" \
-      --repo-name "${{ github.event.repository.name }}" \
-      --pr-number ${{ github.event.pull_request.number }} \
-      --pr-branch "${{ github.event.pull_request.head.ref }}" \
-      --base-branch "${{ github.event.pull_request.base.ref }}" \
+    cat > vars.json << EOF
+    {
+      "app_domain": "${{ vars.APP_DOMAIN }}",
+      "repo_owner": "${{ github.repository_owner }}",
+      "repo_name": "${{ github.event.repository.name }}",
+      "pr_number": ${{ github.event.pull_request.number }},
+      "pr_branch": "${{ github.event.pull_request.head.ref }}",
+      "base_branch": "${{ github.event.pull_request.base.ref }}"
+    }
+    EOF
+    
+    python3 .github/scripts/badges/comment_template.py \
+      --vars vars.json \
+      pr_actions \
+      --branches-file .github/configs/branches.json \
       --output comment.txt
 ```
 
 ## 📝 API Reference
 
-### BadgeGenerator (Core Module)
+### BadgeGenerator
 
 ```python
 from generate_badges import BadgeGenerator
@@ -228,15 +161,21 @@ gen = BadgeGenerator(
     app_domain="https://your-app.com",
     repo_owner="owner",
     repo_name="repo",
-    pr_number=123
+    pr_number=123,
+    pr_branch="feature",
+    base_branch="main"
 )
 
-# Low-level functions
-badge = gen.create_badge("Run Tests", "test.yml", link_type="direct")
-pair = gen.create_badge_pair("Run Tests", "test.yml")
-table = gen.create_table(rows, headers, formatter)
-```
+# Create badge pair
+badge = gen.badge("Run Tests", "test.yml", 
+                  inputs={"test_type": "all"}, 
+                  color="4caf50")
 
+# Create table
+table = gen.table("test.yml", 
+                  rows=[("All", {"test_type": "all"}, "4caf50")],
+                  columns=["Test", "Actions"])
+```
 
 ## 📄 License
 

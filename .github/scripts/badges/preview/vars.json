@@ -1,0 +1,9 @@
+{
+  "app_domain": "https://test.com",
+  "repo_owner": "owner",
+  "repo_name": "repo",
+  "pr_number": 123,
+  "pr_branch": "feature-branch",
+  "base_branch": "main"
+}
+

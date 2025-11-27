@@ -36,16 +36,18 @@ jobs:
               issue_number: prNumber,
             });
             
+            // Look for our badge comment by unique markers from template
             const badgeComment = comments.data.find(comment => 
               comment.user.type === 'Bot' && 
-              (comment.body.includes('▶ Run Tests') || comment.body.includes('Run Tests (Direct)')) &&
-              (comment.body.includes('▶ Backport') || comment.body.includes('Backport (Direct)'))
+              comment.body.includes('## 🚀 Quick Actions') &&
+              comment.body.includes('🧪 Run Tests') &&
+              comment.body.includes('📦 Backport')
             );
             
-            core.setOutput('comment_id', badgeComment ? badgeComment.id : '');
             core.setOutput('exists', badgeComment ? 'true' : 'false');
 
       - name: Generate badge comment
+        if: steps.check_comment.outputs.exists == 'false'
         id: generate_comment
         run: |
           # Create vars JSON file
@@ -60,9 +62,9 @@ jobs:
           }
           EOF
           
-          # Build comment using wrapper script
-          python3 .github/scripts/badges/generate_markdown.py \
-            --config .github/scripts/badges/configs/badge_config.json \
+          # Build comment using Python template script
+          python3 .github/scripts/badges/comment_template.py \
+            pr_actions \
             --vars vars.json \
             --output comment.txt
           
@@ -82,23 +84,5 @@ jobs:
               issue_number: prNumber,
               owner: context.repo.owner,
               repo: context.repo.repo,
-              body: comment
-            });
-
-      - name: Update existing badge comment
-        if: steps.check_comment.outputs.exists == 'true'
-        uses: actions/github-script@v7
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          script: |
-            const fs = require('fs');
-            const prNumber = context.payload.pull_request.number;
-            const commentId = parseInt('${{ steps.check_comment.outputs.comment_id }}');
-            const comment = fs.readFileSync('${{ steps.generate_comment.outputs.comment_file }}', 'utf8');
-            
-            await github.rest.issues.updateComment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              comment_id: commentId,
               body: comment
             });
