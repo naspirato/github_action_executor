@@ -1,63 +1,63 @@
-# Быстрый старт
+# Quick Start
 
-## 1. Установка зависимостей
+## 1. Install Dependencies
 
 ```bash
 pip install -r requirements.txt
 ```
 
-## 2. Настройка переменных окружения
+## 2. Configure Environment Variables
 
-Скопируйте `.env.example` в `.env` и заполните:
+Copy `.env.example` to `.env` and fill it in:
 
 ```bash
 cp .env.example .env
 ```
 
-Минимально необходимые переменные:
-- `SECRET_KEY` - любой случайный секретный ключ
-- `GITHUB_CLIENT_ID` и `GITHUB_CLIENT_SECRET` - из OAuth App
-- `GITHUB_APP_ID` и `GITHUB_APP_INSTALLATION_ID` - из GitHub App
-- `GITHUB_APP_PRIVATE_KEY_PATH` - путь к файлу с приватным ключом
+Minimum required variables:
+- `SECRET_KEY` - any random secret key
+- `GITHUB_CLIENT_ID` and `GITHUB_CLIENT_SECRET` - from OAuth App
+- `GITHUB_APP_ID` and `GITHUB_APP_INSTALLATION_ID` - from GitHub App
+- `GITHUB_APP_PRIVATE_KEY_PATH` - path to private key file
 
-## 3. Создание GitHub App Private Key
+## 3. Create GitHub App Private Key
 
-Скачайте приватный ключ из настроек GitHub App и сохраните как `github-app-private-key.pem`:
+Download the private key from GitHub App settings and save it as `github-app-private-key.pem`:
 
 ```bash
-# Файл должен быть в формате:
+# File should be in format:
 # -----BEGIN RSA PRIVATE KEY-----
 # ...
 # -----END RSA PRIVATE KEY-----
 ```
 
-## 4. Запуск приложения
+## 4. Run the Application
 
 ```bash
 python app.py
 ```
 
-Или с hot-reload:
+Or with hot-reload:
 
 ```bash
 uvicorn app:app --host 0.0.0.0 --port 8000 --reload
 ```
 
-## 5. Откройте в браузере
+## 5. Open in Browser
 
 http://localhost:8000
 
-## Тестирование
+## Testing
 
-1. Нажмите "Войти через GitHub"
-2. Авторизуйтесь
-3. Заполните форму с репозиторием и workflow
-4. Выберите тесты
-5. Запустите workflow
+1. Click "Sign in with GitHub"
+2. Authorize
+3. Fill in the form with repository and workflow
+4. Select tests
+5. Run the workflow
 
-## Пример workflow для тестирования
+## Example Workflow for Testing
 
-Создайте файл `.github/workflows/test.yml` в вашем репозитории:
+Create a `.github/workflows/test.yml` file in your repository:
 
 ```yaml
 name: Test Workflow
@@ -81,90 +81,89 @@ jobs:
       - name: Run tests
         run: |
           echo "Running tests: ${{ inputs.tests }}"
-          # Ваши команды для запуска тестов
+          # Your commands to run tests
 ```
 
 ## Troubleshooting
 
-### Ошибка "Not authenticated"
-- Убедитесь, что вы авторизовались через GitHub OAuth
-- Проверьте, что `GITHUB_CLIENT_ID` и `GITHUB_CLIENT_SECRET` правильные
+### Error "Not authenticated"
+- Make sure you've authorized through GitHub OAuth
+- Check that `GITHUB_CLIENT_ID` and `GITHUB_CLIENT_SECRET` are correct
 
-### Ошибка "Failed to trigger workflow"
-- Проверьте, что GitHub App установлен в репозиторий
-- Убедитесь, что у App есть права на Actions (Read and write)
-- Проверьте, что `workflow_id` соответствует имени файла workflow
+### Error "Failed to trigger workflow"
+- Check that GitHub App is installed in the repository
+- Make sure the App has Actions permissions (Read and write)
+- Check that `workflow_id` matches the workflow file name
 
-### Ошибка "User is not a collaborator"
-- Убедитесь, что вы действительно коллаборатор репозитория (имеете доступ к репозиторию)
-- Проверьте, что OAuth токен имеет права на чтение репозитория
+### Error "User is not a collaborator"
+- Make sure you are actually a repository collaborator (have access to the repository)
+- Check that OAuth token has permissions to read the repository
 
-### Ошибка 403 "Resource not accessible by integration"
-Если вы видите ошибку в GitHub Actions workflow:
+### Error 403 "Resource not accessible by integration"
+If you see an error in GitHub Actions workflow:
 ```
 HttpError: Resource not accessible by integration
 status: 403
 ```
 
-Это означает, что GitHub App не имеет необходимых прав для выполнения операции (например, создание комментариев в issues или PR).
+This means that the GitHub App doesn't have the necessary permissions to perform the operation (e.g., creating comments in issues or PRs).
 
-**Решение:**
+**Solution:**
 
-1. **Если ошибка связана с созданием комментариев в issues/PR:**
-   - Перейдите в настройки GitHub App: `https://github.com/settings/apps`
-   - Откройте ваше приложение
-   - Перейдите в раздел **Permissions & events**
-   - В разделе **Repository permissions** найдите **Issues**
-   - Установите права **Read and write** (или **Write**)
-   - Нажмите **Save changes**
+1. **If the error is related to creating comments in issues/PRs:**
+   - Go to GitHub App settings: `https://github.com/settings/apps`
+   - Open your application
+   - Go to **Permissions & events** section
+   - In **Repository permissions** section, find **Issues**
+   - Set permissions to **Read and write** (or **Write**)
+   - Click **Save changes**
 
-2. **После изменения прав ОБЯЗАТЕЛЬНО обновите установку:**
+2. **After changing permissions, you MUST update the installation:**
    
-   **Для репозитория:**
-   - Перейдите: `https://github.com/YOUR_USERNAME/YOUR_REPO/settings/installations`
-   - Или: Settings → Integrations → GitHub Apps → найдите ваше приложение
-   - Нажмите **Configure** рядом с вашим GitHub App
-   - На странице установки нажмите **Update installation** (или **Save**)
+   **For repository:**
+   - Go to: `https://github.com/YOUR_USERNAME/YOUR_REPO/settings/installations`
+   - Or: Settings → Integrations → GitHub Apps → find your application
+   - Click **Configure** next to your GitHub App
+   - On the installation page, click **Update installation** (or **Save**)
    
-   **Для организации:**
-   - Перейдите: `https://github.com/organizations/YOUR_ORG/settings/installations`
-   - Или: Organization Settings → GitHub Apps → найдите ваше приложение
-   - Нажмите **Configure** → **Update installation**
+   **For organization:**
+   - Go to: `https://github.com/organizations/YOUR_ORG/settings/installations`
+   - Or: Organization Settings → GitHub Apps → find your application
+   - Click **Configure** → **Update installation**
    
-   **Важно:** Без обновления установки новые права не применятся!
+   **Important:** Without updating the installation, new permissions won't be applied!
 
-3. **Проверьте другие необходимые права:**
-   - Если workflow использует другие операции (например, создание PR), убедитесь что у App есть соответствующие права
-   - **Actions**: Read and write (для запуска workflows)
-   - **Contents**: Read-only или Read and write (в зависимости от нужд)
-   - **Issues**: Write (для создания комментариев)
-   - **Pull requests**: Write (для создания комментариев в PR)
-   - **Workflows**: Write (для изменения workflow файлов при backport)
+3. **Check other necessary permissions:**
+   - If workflow uses other operations (e.g., creating PRs), make sure the App has corresponding permissions
+   - **Actions**: Read and write (for running workflows)
+   - **Contents**: Read-only or Read and write (depending on needs)
+   - **Issues**: Write (for creating comments)
+   - **Pull requests**: Write (for creating comments in PRs)
+   - **Workflows**: Write (for modifying workflow files during backport)
 
-**Примечание:** После изменения прав GitHub App, все установки приложения нужно обновить вручную. Без обновления установки новые права не будут работать!
+**Note:** After changing GitHub App permissions, all installations need to be updated manually. Without updating the installation, new permissions won't work!
 
-### Ошибка "OAuth App access restrictions"
-Если вы видите ошибку:
+### Error "OAuth App access restrictions"
+If you see an error:
 ```
 Although you appear to have the correct authorization credentials, 
 the `organization-name` organization has enabled OAuth App access restrictions
 ```
 
-Это означает, что организация включила ограничения доступа для OAuth приложений. Чтобы решить проблему:
+This means that the organization has enabled access restrictions for OAuth applications. To resolve the issue:
 
-1. **Если вы владелец организации или имеете права администратора:**
-   - Перейдите в настройки организации: `https://github.com/organizations/ORGANIZATION_NAME/settings/oauth_application_policy`
-   - Найдите ваше OAuth App в списке "Third-party access"
-   - Нажмите "Grant" или "Approve" для вашего приложения
-   - Подробнее: https://docs.github.com/articles/restricting-access-to-your-organization-s-data/
+1. **If you are the organization owner or have administrator rights:**
+   - Go to organization settings: `https://github.com/organizations/ORGANIZATION_NAME/settings/oauth_application_policy`
+   - Find your OAuth App in the "Third-party access" list
+   - Click "Grant" or "Approve" for your application
+   - More details: https://docs.github.com/articles/restricting-access-to-your-organization-s-data/
 
-2. **Если вы не администратор организации:**
-   - Обратитесь к администратору организации
-   - Попросите его одобрить OAuth App в настройках организации
-   - Администратор должен перейти в: `Settings → Third-party access → OAuth Apps`
-   - И одобрить ваше приложение
+2. **If you are not an organization administrator:**
+   - Contact the organization administrator
+   - Ask them to approve the OAuth App in organization settings
+   - The administrator should go to: `Settings → Third-party access → OAuth Apps`
+   - And approve your application
 
-3. **Альтернативное решение:**
-   - Если у вас нет доступа к настройкам организации, можно использовать GitHub App вместо OAuth App
-   - GitHub Apps не требуют одобрения организации (если установлены в репозиторий)
-
+3. **Alternative solution:**
+   - If you don't have access to organization settings, you can use GitHub App instead of OAuth App
+   - GitHub Apps don't require organization approval (if installed in the repository)
