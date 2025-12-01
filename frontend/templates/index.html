@@ -434,6 +434,7 @@
                         // Disable button and show message if workflow doesn't support manual trigger
                         if (runButton) {
                             runButton.disabled = true;
+                            runButton.classList.remove('btn-active');
                             runButton.style.opacity = '0.5';
                             runButton.style.cursor = 'not-allowed';
                         }
@@ -934,6 +935,7 @@
             // If owner or repo are empty, disable button and show message
             if (!owner || !repo) {
                 runButton.disabled = true;
+                runButton.classList.remove('btn-active');
                 runButton.style.opacity = '0.5';
                 runButton.style.cursor = 'not-allowed';
                 permissionMessage.style.display = 'block';
@@ -947,6 +949,7 @@
                 if (response.status === 401) {
                     // Not authenticated
                     runButton.disabled = true;
+                    runButton.classList.remove('btn-active');
                     runButton.style.opacity = '0.5';
                     runButton.style.cursor = 'not-allowed';
                     permissionMessage.style.display = 'block';
@@ -965,6 +968,7 @@
                 
                 if (data.can_trigger && hasWorkflowDispatch) {
                     runButton.disabled = false;
+                    runButton.classList.add('btn-active');
                     runButton.style.opacity = '1';
                     runButton.style.cursor = 'pointer';
                     permissionMessage.textContent = '';
@@ -974,6 +978,7 @@
                     }
                 } else {
                     runButton.disabled = true;
+                    runButton.classList.remove('btn-active');
                     runButton.style.opacity = '0.5';
                     runButton.style.cursor = 'not-allowed';
                     permissionMessage.style.display = 'block';
@@ -991,6 +996,7 @@
                 console.error('Error checking permissions:', error);
                 // In case of error, allow attempt (check will be on server)
                 runButton.disabled = false;
+                runButton.classList.add('btn-active');
                 runButton.style.opacity = '1';
                 runButton.style.cursor = 'pointer';
                 permissionMessage.textContent = '';

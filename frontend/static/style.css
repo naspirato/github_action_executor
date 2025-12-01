@@ -266,14 +266,26 @@ header h1 {
     width: 100%;
 }
 
-.btn-primary:hover:not(:disabled) {
+/* Green color when button is active (can run workflow) */
+.btn-primary.btn-active {
+    background: #10b981;
+    color: white;
+    border-color: #059669;
+}
+
+.btn-primary.btn-active:hover:not(:disabled) {
+    background: #059669;
+    border-color: #047857;
+}
+
+.btn-primary:not(.btn-active):hover:not(:disabled) {
     background: #f3f4f6;
 }
 
 .btn-primary:active:not(:disabled) {
-    background: #10b981;  /* Зеленый цвет при нажатии */
+    background: #047857;
     color: white;
-    border-color: #059669;
+    border-color: #065f46;
 }
 
 .btn-primary:disabled {
