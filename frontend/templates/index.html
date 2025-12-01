@@ -14,7 +14,7 @@
             <div class="auth-modal">
                 <h2>Authentication Required</h2>
                 <p>Please sign in with GitHub to run workflows</p>
-                <a href="/auth/github" class="btn btn-primary">Sign in with GitHub</a>
+                <a href="/auth/github" id="auth-link" class="btn btn-primary">Sign in with GitHub</a>
             </div>
         </div>
         {% endif %}
@@ -135,7 +135,7 @@
                         {% endif %}
                         <span class="user-login">{{ user.login }}</span>
                     </div>
-                    <a href="/auth/logout" class="btn btn-secondary btn-small">Выйти</a>
+                    <a href="/auth/logout" class="btn btn-secondary btn-small">Logout</a>
             </div>
             </footer>
         </main>
@@ -434,6 +434,7 @@
                         // Disable button and show message if workflow doesn't support manual trigger
                         if (runButton) {
                             runButton.disabled = true;
+                            runButton.classList.remove('btn-active');
                             runButton.style.opacity = '0.5';
                             runButton.style.cursor = 'not-allowed';
                         }
@@ -934,6 +935,7 @@
             // If owner or repo are empty, disable button and show message
             if (!owner || !repo) {
                 runButton.disabled = true;
+                runButton.classList.remove('btn-active');
                 runButton.style.opacity = '0.5';
                 runButton.style.cursor = 'not-allowed';
                 permissionMessage.style.display = 'block';
@@ -947,6 +949,7 @@
                 if (response.status === 401) {
                     // Not authenticated
                     runButton.disabled = true;
+                    runButton.classList.remove('btn-active');
                     runButton.style.opacity = '0.5';
                     runButton.style.cursor = 'not-allowed';
                     permissionMessage.style.display = 'block';
@@ -965,6 +968,7 @@
                 
                 if (data.can_trigger && hasWorkflowDispatch) {
                     runButton.disabled = false;
+                    runButton.classList.add('btn-active');
                     runButton.style.opacity = '1';
                     runButton.style.cursor = 'pointer';
                     permissionMessage.textContent = '';
@@ -974,6 +978,7 @@
                     }
                 } else {
                     runButton.disabled = true;
+                    runButton.classList.remove('btn-active');
                     runButton.style.opacity = '0.5';
                     runButton.style.cursor = 'not-allowed';
                     permissionMessage.style.display = 'block';
@@ -991,6 +996,7 @@
                 console.error('Error checking permissions:', error);
                 // In case of error, allow attempt (check will be on server)
                 runButton.disabled = false;
+                runButton.classList.add('btn-active');
                 runButton.style.opacity = '1';
                 runButton.style.cursor = 'pointer';
                 permissionMessage.textContent = '';
@@ -998,9 +1004,17 @@
             }
         }
         
-        // Инициализация при загрузке
+        // Initialize on page load
         function initAll() {
-            // Инициализируем скрытое поле return_url из URL параметров, если его нет
+            // Update the authorization link to pass the current URL with parameters
+            const authLink = document.getElementById('auth-link');
+            if (authLink && window.location.search) {
+                const currentUrl = window.location.href;
+                const redirectAfter = encodeURIComponent(currentUrl);
+                authLink.href = `/auth/github?redirect_after=${redirectAfter}`;
+            }
+            
+            // Initialize the hidden return_url field from URL parameters if not present
             const form = document.getElementById('workflowForm');
             if (form) {
                 const urlParams = new URLSearchParams(window.location.search);
@@ -1008,7 +1022,7 @@
                 if (returnUrlFromUrl) {
                     let returnUrlInput = form.querySelector('input[name="return_url"]');
                     if (!returnUrlInput) {
-                        // Создаем скрытое поле, если его нет
+                        // Create hidden field if it doesn't exist
                         returnUrlInput = document.createElement('input');
                         returnUrlInput.type = 'hidden';
                         returnUrlInput.name = 'return_url';
