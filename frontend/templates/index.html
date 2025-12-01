@@ -14,7 +14,7 @@
             <div class="auth-modal">
                 <h2>Authentication Required</h2>
                 <p>Please sign in with GitHub to run workflows</p>
-                <a href="/auth/github" class="btn btn-primary">Sign in with GitHub</a>
+                <a href="/auth/github" id="auth-link" class="btn btn-primary">Sign in with GitHub</a>
             </div>
         </div>
         {% endif %}
@@ -135,7 +135,7 @@
                         {% endif %}
                         <span class="user-login">{{ user.login }}</span>
                     </div>
-                    <a href="/auth/logout" class="btn btn-secondary btn-small">Выйти</a>
+                    <a href="/auth/logout" class="btn btn-secondary btn-small">Logout</a>
             </div>
             </footer>
         </main>
@@ -1000,6 +1000,14 @@
         
         // Инициализация при загрузке
         function initAll() {
+            // Обновляем ссылку на авторизацию, чтобы она передавала текущий URL с параметрами
+            const authLink = document.getElementById('auth-link');
+            if (authLink && window.location.search) {
+                const currentUrl = window.location.href;
+                const redirectAfter = encodeURIComponent(currentUrl);
+                authLink.href = `/auth/github?redirect_after=${redirectAfter}`;
+            }
+            
             // Инициализируем скрытое поле return_url из URL параметров, если его нет
             const form = document.getElementById('workflowForm');
             if (form) {

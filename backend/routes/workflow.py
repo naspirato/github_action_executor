@@ -41,10 +41,13 @@ async def _trigger_and_show_result(
     access_token = request.session.get("access_token")
     
     if not user or not access_token:
-        # Save current URL for redirect after OAuth
-        current_url = str(request.url)
-        request.session["oauth_redirect_after"] = current_url
-        logger.info(f"No session found, saving redirect URL: {current_url}")
+        # Save current URL (relative path with query) for redirect after OAuth
+        # Use relative path for security (prevents open redirect attacks)
+        redirect_path = request.url.path
+        if request.url.query:
+            redirect_path = f"{redirect_path}?{request.url.query}"
+        request.session["oauth_redirect_after"] = redirect_path
+        logger.info(f"No session found, saving redirect path: {redirect_path}")
         
         # Redirect to login
         oauth_url = get_oauth_url()

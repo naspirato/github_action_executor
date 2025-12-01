@@ -76,7 +76,7 @@
 
                 <div id="run-loader" class="run-loader" style="display: {% if run_url %}none{% else %}flex{% endif %};">
                     <div class="loader"></div>
-                    <p class="loading-message">Ищем запуск workflow...</p>
+                    <p class="loading-message">Searching for workflow run...</p>
                 </div>
 
                 <div class="action-links" id="action-links" style="display: {% if run_url %}flex{% else %}none{% endif %};">
@@ -208,10 +208,10 @@
                             // Продолжаем опрос
                             setTimeout(findRun, pollInterval);
                         } else {
-                            // Превысили лимит попыток
+                            // Exceeded attempt limit
                             const loader = document.getElementById('run-loader');
                             if (loader) {
-                                loader.innerHTML = '<p class="loading-message">Не удалось найти запуск. <a href="' + workflowUrl + '" target="_blank" style="color: #000; text-decoration: underline;">Открыть список workflow</a></p>';
+                                loader.innerHTML = '<p class="loading-message">Failed to find run. <a href="' + workflowUrl + '" target="_blank" style="color: #000; text-decoration: underline;">Open workflow list</a></p>';
                             }
                             
                             // Показываем кнопки даже если не нашли run
@@ -228,7 +228,7 @@
                         } else {
                             const loader = document.getElementById('run-loader');
                             if (loader) {
-                                loader.innerHTML = '<p class="loading-message" style="color: #999;">Ошибка при поиске запуска. <a href="' + workflowUrl + '" target="_blank" style="color: #000; text-decoration: underline;">Открыть список workflow</a></p>';
+                                loader.innerHTML = '<p class="loading-message" style="color: #999;">Error searching for run. <a href="' + workflowUrl + '" target="_blank" style="color: #000; text-decoration: underline;">Open workflow list</a></p>';
                             }
                         }
                     });
